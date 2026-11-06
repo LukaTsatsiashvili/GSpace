@@ -26,6 +26,7 @@ export function Select({ value, options, onChange, label, className = '' }: {
   const [position, setPosition] = useState({ top: 0, left: 0, width: 0, maxHeight: 240 });
   const [menuTheme, setMenuTheme] = useState<CSSProperties>({});
   const trigger = useRef<HTMLButtonElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
   const calculate = () => {
     const element = trigger.current;
     if (!element) return;
@@ -46,14 +47,20 @@ export function Select({ value, options, onChange, label, className = '' }: {
   useEffect(() => {
     if (!open) return;
     const close = () => setOpen(false);
+    const onScroll = (event: Event) => {
+      // Scrolling the portaled options list is an intentional interaction.
+      // Only an outside scroll should dismiss the floating menu.
+      if (event.target instanceof Node && menu.current?.contains(event.target)) return;
+      close();
+    };
     const key = (event: KeyboardEvent) => { if (event.key === 'Escape') close(); };
-    window.addEventListener('scroll', close, true);
+    window.addEventListener('scroll', onScroll, true);
     window.addEventListener('resize', close);
     document.addEventListener('keydown', key);
-    return () => { window.removeEventListener('scroll', close, true); window.removeEventListener('resize', close); document.removeEventListener('keydown', key); };
+    return () => { window.removeEventListener('scroll', onScroll, true); window.removeEventListener('resize', close); document.removeEventListener('keydown', key); };
   }, [open]);
   return <div className={`ui-select-wrap ${className}`}><button ref={trigger} type="button" className="ui-select" aria-label={label} aria-haspopup="listbox" aria-expanded={open} onClick={() => { if (!open) calculate(); setOpen(!open); }}><span>{value}</span><ChevronDown size={15}/></button>
-    {open && createPortal(<><button type="button" className="ui-select-dismiss" aria-label="Close dropdown" onClick={() => setOpen(false)}/><div className="ui-select-options" role="listbox" aria-label={label} style={{ ...menuTheme, top: position.top, left: position.left, width: position.width, maxHeight: position.maxHeight }}>{options.map(option => <button type="button" key={option} role="option" aria-selected={option === value} onClick={() => { onChange(option); setOpen(false); }}>{option}{option === value && <Check size={14}/>}</button>)}</div></>, document.body)}
+    {open && createPortal(<><button type="button" className="ui-select-dismiss" aria-label="Close dropdown" onClick={() => setOpen(false)}/><div ref={menu} className="ui-select-options" role="listbox" aria-label={label} style={{ ...menuTheme, top: position.top, left: position.left, width: position.width, maxHeight: position.maxHeight }}>{options.map(option => <button type="button" key={option} role="option" aria-selected={option === value} onClick={() => { onChange(option); setOpen(false); }}>{option}{option === value && <Check size={14}/>}</button>)}</div></>, document.body)}
   </div>;
 }
 
