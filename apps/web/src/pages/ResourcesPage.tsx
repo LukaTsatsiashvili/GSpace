@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  ArrowDownToLine, Boxes, Check, ChevronDown, ClipboardList, Grid2X2, Wrench, Users, Box,
+  ArrowDownToLine, Boxes, Check, ClipboardList, Grid2X2, Wrench, Users, Box,
   List, Monitor, Package, Plus, Search, Smartphone,
   Laptop, Printer, Router, ArrowLeftRight, X, type LucideIcon
 } from 'lucide-react';
-import { Badge, Button, Card, PageHeader } from '../components/ui';
+import { Badge, Button, Card, PageHeader, Select } from '../components/ui';
 import NewResourceDialog from './NewResourceDialog';
 import './resources.css';
 
@@ -32,10 +32,7 @@ const categories = ['All categories', ...Array.from(new Set(resources.map(resour
 const branches = ['All branches', ...Array.from(new Set(resources.map(resource => resource.branch)))];
 
 function SelectMenu({ label, value, options, onChange }: { label: string; value: string; options: readonly string[]; onChange: (value: string) => void }) {
-  const [open, setOpen] = useState(false);
-  return <div className="rs-select-wrap"><button className="rs-select" aria-label={label} aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen(!open)}><span>{value}</span><ChevronDown size={15}/></button>
-    {open && <><button className="rs-select-dismiss" aria-label="Close options" onClick={() => setOpen(false)}/><div className="rs-select-menu" role="listbox" aria-label={label}>{options.map(option => <button role="option" aria-selected={option === value} key={option} onClick={() => { onChange(option); setOpen(false); }}>{option}{option === value && <Check size={14}/>}</button>)}</div></>}
-  </div>;
+  return <Select className="rs-select-wrap" label={label} value={value} options={options} onChange={onChange}/>;
 }
 
 function StatusPill({ status }: { status: Status }) {

@@ -20,3 +20,8 @@
 .nw-confirm-overlay{position:absolute;inset:0;z-index:10;display:grid;place-items:center;background:#081323c9;padding:16px}.nw-confirm-overlay>div{width:min(410px,100%);padding:30px;border-radius:13px;border:1px solid var(--border);background:var(--surface);text-align:center}.nw-confirm-overlay svg{color:var(--accent)}.nw-confirm-overlay h3{font-size:18px;margin:14px 0}.nw-confirm-overlay p{font-size:12px;color:var(--muted);line-height:1.65;margin:0 0 23px}
 @media(max-width:680px){.nw-header,.nw-content{padding:20px 18px}.nw-steps{padding:14px 15px;gap:3px}.nw-step{flex-direction:column;gap:5px;text-align:center}.nw-step strong{font-size:9px}.nw-footer{padding:13px 18px}.nw-fields{grid-template-columns:1fr}.nw-review-grid{grid-template-columns:1fr}.nw-section-title{margin-bottom:19px}}
 @media(max-width:480px){.nw-modal{max-height:calc(100dvh - 18px)}.nw-header h2{font-size:18px}.nw-step>span{width:24px;height:24px}.nw-footer>span{max-width:120px;line-height:1.4}}
+/* Shared form controls own input borders, focus rings and dropdown rendering. */
+.nw-field .ui-input{min-height:42px;padding:10px 13px;border:1px solid var(--border);background:var(--surface);outline:0;box-shadow:none}
+.nw-field .ui-input:focus{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.nw-field .ui-textarea{min-height:75px}
+.nw-field .ui-select{min-height:42px;font-size:12px}

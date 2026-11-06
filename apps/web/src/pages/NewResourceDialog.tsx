@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, ChevronDown, Download, ShieldCheck, Wallet, X } from 'lucide-react';
-import { Button } from '../components/ui';
+import { Check, Download, ShieldCheck, Wallet, X } from 'lucide-react';
+import { Button, Input, Select, Textarea } from '../components/ui';
 import './new-resource.css';
 
 type FormData = {
@@ -24,7 +24,7 @@ function Field({ label, required, children, hint }: { label: string; required?: 
 }
 
 function SelectField({ label, required, value, options, change }: { label: string; required?: boolean; value: string; options: string[]; change: (value: string) => void }) {
-  return <Field label={label} required={required}><span className="nw-select-container"><select value={value} onChange={event => change(event.target.value)}>{options.map(option => <option key={option}>{option}</option>)}</select><ChevronDown size={15}/></span></Field>;
+  return <Field label={label} required={required}><Select label={label} value={value} options={options} onChange={change}/></Field>;
 }
 
 function Notice({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) {
@@ -40,7 +40,7 @@ export default function NewResourceDialog({ close }: { close: () => void }) {
   const fileInput = useRef<HTMLInputElement>(null);
   const content = useRef<HTMLDivElement>(null);
   const update = (key: keyof FormData) => (value: string) => { setForm(current => ({ ...current, [key]: value })); setError(''); };
-  const field = (key: keyof FormData, placeholder = '', type = 'text') => <input type={type} placeholder={placeholder} value={form[key]} onChange={event => update(key)(event.target.value)}/>;
+  const field = (key: keyof FormData, placeholder = '', type = 'text') => <Input type={type} placeholder={placeholder} value={form[key]} onChange={event => update(key)(event.target.value)}/>;
   const go = (next: number) => { setStep(next); setError(''); content.current?.scrollTo({ top: 0 }); };
   const continueStep = () => {
     if (step === 0 && !form.name.trim()) { setError('Please enter a resource name.'); return; }
@@ -73,7 +73,7 @@ export default function NewResourceDialog({ close }: { close: () => void }) {
             <SelectField label="Category" required value={form.category} options={categories} change={update('category')}/>
             <SelectField label="Initial condition" required value={form.condition} options={['Excellent','Good','Fair','Damaged','Poor']} change={update('condition')}/>
             <div className="nw-full nw-type"><span>Resource type <b>*</b></span><div>{['Physical Asset','Digital Asset','Bundle'].map(value => <button className={form.type === value ? 'selected' : ''} key={value} aria-pressed={form.type === value} onClick={() => update('type')(value)}>{value}</button>)}</div><small>Consumables, licenses and subscriptions have their own specialized modules and flows.</small></div>
-            <div className="nw-full"><Field label="Description / notes"><textarea rows={3} placeholder="Optional notes about this resource" value={form.notes} onChange={event => update('notes')(event.target.value)}/></Field></div></div>
+            <div className="nw-full"><Field label="Description / notes"><Textarea rows={3} placeholder="Optional notes about this resource" value={form.notes} onChange={event => update('notes')(event.target.value)}/></Field></div></div>
           <Notice icon={<ShieldCheck size={18}/>}> <strong>Administrator-managed registration.</strong> New resources are created by authorized users. The generated identifier and subsequent changes appear in Audit Timeline.</Notice>
         </>}
         {step === 1 && <>
