@@ -38,3 +38,8 @@
 .rs-catalog-foot{padding:15px 22px}
 @media(max-width:850px){.rs-toolbar-spacer{display:none}.rs-reset{margin-left:0}}
 @media(max-width:550px){.rs-summary>.ui-card{min-height:134px;padding:18px 15px}.rs-stat-icon{top:15px;right:13px;width:29px;height:29px}.rs-catalog-tabs{padding:0 8px}.rs-catalog-tabs>button{font-size:11px;padding:15px 10px}.rs-toolbar{padding:14px}.rs-search{width:100%}}
+.rs-table{min-width:1020px}.rs-table th:last-child,.rs-table td:last-child{width:45px;text-align:center}.rs-table td{height:71px}.rs-table th{font-size:10px}.rs-table tbody tr{height:71px}
+.rs-location-cell{display:flex;flex-direction:column;gap:3px}.rs-location-cell small{font-size:10px;color:var(--muted)}
+.rs-row-action{color:var(--muted)}.rs-thumb{background:#eef3ff;color:#8ba1c4;border-radius:8px}
+.rs-status{padding:6px 9px;border-radius:6px;font-size:10px}.rs-status.available{background:#e7efff;color:#3368e7}.rs-status.assigned{background:#def8e9;color:#169869}.rs-status.in-maintenance{background:#fff1db;color:#b17a1c}.rs-status.retired{background:#e8edf5;color:#798b9e}
+.rs-catalog-tabs>button{padding:17px 13px;font-size:11px}.rs-catalog-tabs{gap:3px}.rs-table td:nth-child(2),.rs-table th:nth-child(2){width:15%}

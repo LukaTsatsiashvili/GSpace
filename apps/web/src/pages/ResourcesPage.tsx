@@ -2,31 +2,31 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   ArrowDownToLine, Boxes, Check, ChevronDown, ClipboardList, Grid2X2, Wrench, Users, Box,
   List, Monitor, Package, Plus, Search, Smartphone,
-  Laptop, Printer, Router, Keyboard, X, type LucideIcon
+  Laptop, Printer, Router, ArrowLeftRight, X, type LucideIcon
 } from 'lucide-react';
 import { Badge, Button, Card, PageHeader } from '../components/ui';
 import './resources.css';
 
-type Status = 'Available' | 'Assigned' | 'In maintenance' | 'In transfer';
+type Status = 'Available' | 'Assigned' | 'In maintenance' | 'Retired';
 type View = 'list' | 'grid';
 type Tab = 'Overview' | 'Assignment history' | 'Maintenance';
 type Resource = {
   id: string; name: string; category: string; branch: string; status: Status;
-  condition: string; assignee: string; serial: string; purchaseDate: string; icon: LucideIcon;
+  condition: string; assignee: string; location: string; serial: string; purchaseDate: string; icon: LucideIcon;
 };
 
 const resources: Resource[] = [
-  { id: 'AST-00123', name: 'Dell UltraSharp U2723QE', category: 'Monitor', branch: 'Tbilisi Store 01', status: 'Available', condition: 'Good', assignee: '—', serial: 'DELL-U27-8821', purchaseDate: 'Sep 14, 2026', icon: Monitor },
-  { id: 'AST-00119', name: 'Samsung Galaxy Tab S9', category: 'Tablet', branch: 'Kutaisi Store 01', status: 'Available', condition: 'Good', assignee: '—', serial: 'SG-TS9-1162', purchaseDate: 'Oct 08, 2026', icon: Smartphone },
-  { id: 'AST-00118', name: 'Lenovo ThinkPad T14', category: 'Computers', branch: 'Batumi Store 01', status: 'Assigned', condition: 'Excellent', assignee: 'Giorgi Maisuradze', serial: 'LEN-T14-2237', purchaseDate: 'Aug 20, 2026', icon: Laptop },
-  { id: 'AST-00117', name: 'HP LaserJet Pro M404', category: 'Printers', branch: 'Kutaisi Store 01', status: 'In maintenance', condition: 'Fair', assignee: '—', serial: 'HP-M404-8894', purchaseDate: 'Jul 11, 2026', icon: Printer },
-  { id: 'AST-00116', name: 'Cisco Catalyst 9200', category: 'Network', branch: 'Head Office', status: 'Available', condition: 'Fair', assignee: '—', serial: 'CSC-9200-4432', purchaseDate: 'May 05, 2026', icon: Router },
-  { id: 'AST-00115', name: 'Apple iPhone 15', category: 'Mobile devices', branch: 'Tbilisi Store 01', status: 'Assigned', condition: 'Good', assignee: 'Mariam Beridze', serial: 'APL-IP15-2291', purchaseDate: 'Nov 02, 2026', icon: Smartphone },
-  { id: 'AST-00114', name: 'Logitech MX Keys', category: 'Peripherals', branch: 'Head Office', status: 'In transfer', condition: 'Good', assignee: '—', serial: 'LOG-MXK-1017', purchaseDate: 'Mar 18, 2026', icon: Keyboard },
-  { id: 'AST-00113', name: 'Dell Latitude 5440', category: 'Computers', branch: 'Kutaisi Store 01', status: 'Available', condition: 'Good', assignee: '—', serial: 'DELL-L54-5566', purchaseDate: 'Feb 11, 2026', icon: Laptop }
+  { id: 'AST-00124', name: 'Lenovo ThinkPad T14', category: 'Laptop', branch: 'Head Office', location: 'IT Office · Floor 2', status: 'Assigned', condition: 'Excellent', assignee: 'Sandro Papiashvili', serial: 'LEN-T14-2237', purchaseDate: 'Aug 20, 2026', icon: Laptop },
+  { id: 'AST-00123', name: 'Dell UltraSharp U2723QE', category: 'Monitor', branch: 'Tbilisi Store 01', location: 'Storage A', status: 'Available', condition: 'Good', assignee: '—', serial: 'DELL-U27-8821', purchaseDate: 'Sep 14, 2026', icon: Monitor },
+  { id: 'AST-00122', name: 'Apple iPhone 15', category: 'Mobile Device', branch: 'Head Office', location: 'IT Office', status: 'Assigned', condition: 'Good', assignee: 'Giorgi Maisuradze', serial: 'APL-IP15-2291', purchaseDate: 'Nov 02, 2026', icon: Smartphone },
+  { id: 'AST-00121', name: 'HP LaserJet Pro M404', category: 'Printer', branch: 'Batumi Store 01', location: 'Service Center', status: 'In maintenance', condition: 'Damaged', assignee: '—', serial: 'HP-M404-8894', purchaseDate: 'Jul 11, 2026', icon: Printer },
+  { id: 'AST-00120', name: 'MacBook Air M3', category: 'Laptop', branch: 'Tbilisi Store 01', location: 'Manager Office', status: 'Assigned', condition: 'Excellent', assignee: 'Nino Kapanadze', serial: 'MBA-M3-2020', purchaseDate: 'Oct 10, 2026', icon: Laptop },
+  { id: 'AST-00119', name: 'Samsung Galaxy Tab S9', category: 'Tablet', branch: 'Kutaisi Store 01', location: 'Storage B', status: 'Available', condition: 'Good', assignee: '—', serial: 'SG-TS9-1162', purchaseDate: 'Oct 08, 2026', icon: Smartphone },
+  { id: 'AST-00118', name: 'Cisco Catalyst 9200', category: 'Network', branch: 'Head Office', location: 'Server Room', status: 'Available', condition: 'Fair', assignee: '—', serial: 'CSC-9200-4432', purchaseDate: 'May 05, 2026', icon: Router },
+  { id: 'AST-00117', name: 'Epson TM-T88VII', category: 'POS Device', branch: 'Batumi Store 01', location: 'Archive', status: 'Retired', condition: 'Poor', assignee: '—', serial: 'EPS-88-0177', purchaseDate: 'Feb 11, 2026', icon: Package }
 ];
 
-const statuses = ['All statuses', 'Available', 'Assigned', 'In maintenance', 'In transfer'] as const;
+const statuses = ['All statuses', 'Available', 'Assigned', 'In maintenance', 'Retired'] as const;
 const categories = ['All categories', ...Array.from(new Set(resources.map(resource => resource.category)))];
 const branches = ['All branches', ...Array.from(new Set(resources.map(resource => resource.branch)))];
 
@@ -38,7 +38,7 @@ function SelectMenu({ label, value, options, onChange }: { label: string; value:
 }
 
 function StatusPill({ status }: { status: Status }) {
-  return <span className={`rs-status ${status.toLowerCase().replace(/\s+/g, '-')}`}><span/>{status}</span>;
+  return <span className={`rs-status ${status.toLowerCase().replace(/\s+/g, '-')}`}><span/>{status === 'In maintenance' ? 'In Maintenance' : status}</span>;
 }
 
 function ResourceDrawer({ resource, close }: { resource: Resource; close: () => void }) {
@@ -98,7 +98,7 @@ export default function ResourcesPage() {
     <div className="rs-summary"><Card><span>Total assets</span><i className="rs-stat-icon rs-stat-blue"><Box size={19}/></i><strong>248</strong><small>Across 4 branches</small></Card><Card><span>Assigned</span><i className="rs-stat-icon rs-stat-green"><Users size={19}/></i><strong>164</strong><small><em>66%</em> of registered assets</small></Card><Card><span>Available</span><i className="rs-stat-icon rs-stat-purple"><Check size={19}/></i><strong>68</strong><small>Ready for assignment</small></Card><Card><span>In maintenance</span><i className="rs-stat-icon rs-stat-amber"><Wrench size={19}/></i><strong>9</strong><small>Require attention</small></Card></div>
     <Card className="rs-catalog"><div className="rs-catalog-tabs" role="tablist" aria-label="Resource categories">{['All assets','Assigned','Available','In Maintenance','Asset register'].map(tab => <button key={tab} role="tab" aria-selected={activeTab === tab} className={activeTab === tab ? 'active' : ''} onClick={() => {setActiveTab(tab); clearFilters();}}>{tab}</button>)}</div>
       <div className="rs-toolbar"><div className="rs-search"><Search size={16}/><input aria-label="Search resources" placeholder="Search by name, ID or serial..." value={search} onChange={event => setSearch(event.target.value)}/></div><SelectMenu label="Filter status" value={status} options={statuses} onChange={setStatus}/><SelectMenu label="Filter branch" value={branch} options={branches} onChange={setBranch}/><SelectMenu label="Filter type" value={category === 'All categories' ? 'All types' : category} options={['All types', ...categories.slice(1)]} onChange={value => setCategory(value === 'All types' ? 'All categories' : value)}/><div className="rs-toolbar-spacer"/><button className="rs-reset" onClick={clearFilters}>Clear filters</button><button className="rs-view-toggle" onClick={() => setView(view === 'list' ? 'grid' : 'list')}>{view === 'list' ? <Grid2X2 size={16}/> : <List size={16}/>} {view === 'list' ? 'Cards' : 'List'}</button></div>
-      {view === 'list' ? <div className="rs-table-scroll"><table className="rs-table"><thead><tr><th>RESOURCE</th><th>CATEGORY</th><th>BRANCH</th><th>ASSIGNED TO</th><th>CONDITION</th><th>STATUS</th></tr></thead><tbody>{visible.map(resource => { const Icon = resource.icon; return <tr key={resource.id} tabIndex={0} role="button" aria-label={`Open ${resource.name} details`} onClick={() => setSelected(resource)} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelected(resource); } }}><td><div className="rs-resource-cell"><span className="rs-thumb"><Icon size={20}/></span><div><strong>{resource.name}</strong><small>{resource.id}</small></div></div></td><td>{resource.category}</td><td>{resource.branch}</td><td>{resource.assignee}</td><td>{resource.condition}</td><td><StatusPill status={resource.status}/></td></tr>; })}</tbody></table></div> : <div className="rs-card-grid">{visible.map(resource => { const Icon = resource.icon; return <button className="rs-resource-card" key={resource.id} onClick={() => setSelected(resource)}><div className="rs-resource-card-head"><span className="rs-thumb"><Icon size={23}/></span><StatusPill status={resource.status}/></div><h3>{resource.name}</h3><span>{resource.id} · {resource.category}</span><div className="rs-resource-card-foot"><span>{resource.branch}</span><span>{resource.condition}</span></div></button>; })}</div>}
+      {view === 'list' ? <div className="rs-table-scroll"><table className="rs-table"><thead><tr><th>RESOURCE / ID</th><th>CATEGORY</th><th>BRANCH / LOCATION</th><th>ASSIGNED TO</th><th>CONDITION</th><th>STATUS</th><th aria-label="Actions"/></tr></thead><tbody>{visible.map(resource => { const Icon = resource.icon; return <tr key={resource.id} tabIndex={0} role="button" aria-label={`Open ${resource.name} details`} onClick={() => setSelected(resource)} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelected(resource); } }}><td><div className="rs-resource-cell"><span className="rs-thumb"><Icon size={20}/></span><div><strong>{resource.name}</strong><small>{resource.id}</small></div></div></td><td>{resource.category}</td><td><div className="rs-location-cell">{resource.branch}<small>{resource.location}</small></div></td><td>{resource.assignee}</td><td>{resource.condition}</td><td><StatusPill status={resource.status}/></td><td className="rs-row-action"><ArrowLeftRight size={17}/></td></tr>; })}</tbody></table></div> : <div className="rs-card-grid">{visible.map(resource => { const Icon = resource.icon; return <button className="rs-resource-card" key={resource.id} onClick={() => setSelected(resource)}><div className="rs-resource-card-head"><span className="rs-thumb"><Icon size={23}/></span><StatusPill status={resource.status}/></div><h3>{resource.name}</h3><span>{resource.id} · {resource.category}</span><div className="rs-resource-card-foot"><span>{resource.branch}</span><span>{resource.condition}</span></div></button>; })}</div>}
       {!visible.length && <div className="rs-empty"><Boxes size={28}/><h3>No resources found</h3><p>Try another search or remove some filters.</p><Button onClick={clearFilters}>Clear filters</Button></div>}
       <div className="rs-catalog-foot"><span><strong>{visible.length}</strong> sample records shown · 248 company-wide</span><span>Click any row to view asset details</span></div></Card>
     <p className="rs-preview-note"><Badge tone="blue">UI preview</Badge> Resource records and actions are illustrative. Database writes are not enabled.</p>
