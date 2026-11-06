@@ -1,0 +1,10 @@
+.bw-modal{width:min(880px,100%)}
+.bw-content{padding-top:28px}
+.bw-intro h3{font-size:16px;margin:0 0 8px;letter-spacing:-.2px}.bw-intro p{font-size:12px;color:var(--muted);margin:0;line-height:1.5}
+.bw-methods{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px;margin:23px 0 22px}
+.bw-method{display:flex;flex-direction:column;align-items:flex-start;min-width:0;min-height:140px;padding:22px;border:1px solid var(--border);border-radius:12px;background:var(--surface);color:var(--text);text-align:left;transition:border-color .15s,background-color .15s}
+.bw-method:hover{background:var(--surface2)}.bw-method.selected{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.bw-method svg{margin-bottom:18px;color:var(--text)}.bw-method strong{font-size:14px;line-height:1.4}.bw-method span{color:var(--muted);font-size:11px;line-height:1.6;margin-top:5px}
+.bw-fields{gap:18px 19px}.bw-hint{font-size:11px;color:var(--muted);line-height:1.5;margin:10px 0 0}
+.bw-dropzone{min-height:173px;background:var(--surface2)}.bw-notice{margin-top:19px}
+@media(max-width:650px){.bw-methods{grid-template-columns:1fr}.bw-method{min-height:115px;padding:17px}.bw-method svg{margin-bottom:11px}}

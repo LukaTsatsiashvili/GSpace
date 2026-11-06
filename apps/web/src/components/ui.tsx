@@ -1,5 +1,6 @@
-import type { ButtonHTMLAttributes, HTMLAttributes, ReactNode } from 'react';
-import { ArrowRight, Inbox } from 'lucide-react';
+import { useEffect, useRef, useState, type ButtonHTMLAttributes, type CSSProperties, type HTMLAttributes, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes } from 'react';
+import { createPortal } from 'react-dom';
+import { ArrowRight, Check, ChevronDown, Inbox } from 'lucide-react';
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: 'primary' | 'secondary' | 'quiet';
@@ -8,6 +9,59 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 
 export function Button({ variant = 'secondary', icon, children, className = '', ...props }: ButtonProps) {
   return <button className={`ui-button ui-button-${variant} ${className}`} {...props}>{icon}{children}</button>;
+}
+
+export function Input({ className = '', ...props }: InputHTMLAttributes<HTMLInputElement>) {
+  return <input className={`ui-input ${className}`} {...props}/>;
+}
+
+export function Textarea({ className = '', ...props }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return <textarea className={`ui-input ui-textarea ${className}`} {...props}/>;
+}
+
+export function Select({ value, options, onChange, label, className = '' }: {
+  value: string; options: readonly string[]; onChange: (value: string) => void; label: string; className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [position, setPosition] = useState({ top: 0, left: 0, width: 0, maxHeight: 240 });
+  const [menuTheme, setMenuTheme] = useState<CSSProperties>({});
+  const trigger = useRef<HTMLButtonElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
+  const calculate = () => {
+    const element = trigger.current;
+    if (!element) return;
+    const rect = element.getBoundingClientRect();
+    // The menu is portaled outside `.app` to avoid clipped modal scroll areas.
+    // Copy theme tokens so its colors remain identical to the originating control.
+    const computed = getComputedStyle(element);
+    const tokens = ['--surface', '--surface2', '--text', '--muted', '--border', '--accent', '--accent-soft'];
+    setMenuTheme(Object.fromEntries(tokens.map(token => [token, computed.getPropertyValue(token).trim()])) as CSSProperties);
+    const below = window.innerHeight - rect.bottom;
+    const above = rect.top;
+    const desiredHeight = Math.min(options.length * 39 + 12, 370);
+    const showAbove = below < Math.min(desiredHeight, 190) && above > below;
+    const available = Math.max(80, (showAbove ? above : below) - 14);
+    const maxHeight = Math.min(desiredHeight, available);
+    setPosition({ top: showAbove ? rect.top - 6 - maxHeight : rect.bottom + 6, left: Math.max(8, Math.min(rect.left, window.innerWidth - rect.width - 8)), width: rect.width, maxHeight });
+  };
+  useEffect(() => {
+    if (!open) return;
+    const close = () => setOpen(false);
+    const onScroll = (event: Event) => {
+      // Scrolling the portaled options list is an intentional interaction.
+      // Only an outside scroll should dismiss the floating menu.
+      if (event.target instanceof Node && menu.current?.contains(event.target)) return;
+      close();
+    };
+    const key = (event: KeyboardEvent) => { if (event.key === 'Escape') close(); };
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', close);
+    document.addEventListener('keydown', key);
+    return () => { window.removeEventListener('scroll', onScroll, true); window.removeEventListener('resize', close); document.removeEventListener('keydown', key); };
+  }, [open]);
+  return <div className={`ui-select-wrap ${className}`}><button ref={trigger} type="button" className="ui-select" aria-label={label} aria-haspopup="listbox" aria-expanded={open} onClick={() => { if (!open) calculate(); setOpen(!open); }}><span>{value}</span><ChevronDown size={15}/></button>
+    {open && createPortal(<><button type="button" className="ui-select-dismiss" aria-label="Close dropdown" onClick={() => setOpen(false)}/><div ref={menu} className="ui-select-options" role="listbox" aria-label={label} style={{ ...menuTheme, top: position.top, left: position.left, width: position.width, maxHeight: position.maxHeight }}>{options.map(option => <button type="button" key={option} role="option" aria-selected={option === value} onClick={() => { onChange(option); setOpen(false); }}>{option}{option === value && <Check size={14}/>}</button>)}</div></>, document.body)}
+  </div>;
 }
 
 export function Badge({ children, tone = 'neutral' }: { children: ReactNode; tone?: 'neutral' | 'blue' | 'green' | 'amber' }) {
