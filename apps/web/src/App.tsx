@@ -3,6 +3,7 @@ import { Bell, Boxes, ChevronDown, Menu, Moon, Search, Sun, ArrowUpRight } from 
 import { modules, moduleGroups, moduleFromHash } from './modules';
 import { Badge, Card, EmptyState, PageHeader, SectionTabs } from './components/ui';
 import OverviewPage from './pages/OverviewPage';
+import ResourcesPage from './pages/ResourcesPage';
 
 type Theme = 'light' | 'dark';
 
@@ -64,7 +65,7 @@ export default function App() {
         <button className="icon-action" aria-label="Notifications (not yet connected)" disabled title="Notifications will be added with the backend workflows"><Bell size={19}/></button>
         <div className="profile"><div className="profile-avatar">SP</div><div className="profile-text"><strong>Sandro P.</strong><small>System Administrator · demo</small></div><ChevronDown size={14} className="profile-chevron"/></div>
       </div></header>
-      <main className="content">{current.id === 'overview' ? <OverviewPage navigate={navigate}/> : <>
+      <main className="content">{current.id === 'overview' ? <OverviewPage navigate={navigate}/> : current.id === 'resources' ? <ResourcesPage/> : <>
         <PageHeader eyebrow={`${current.group} / RESOURCE MANAGEMENT`} title={current.label} description={current.description}/>
         <ModulePage key={current.id} label={current.label}/>
         <div className="preview-notice"><Badge tone="blue">Development build</Badge><span>Visual shell and sample metrics only. All business operations require future authenticated API integration.</span></div>
