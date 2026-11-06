@@ -5,6 +5,7 @@ import {
   Laptop, Printer, Router, ArrowLeftRight, X, type LucideIcon
 } from 'lucide-react';
 import { Badge, Button, Card, PageHeader } from '../components/ui';
+import NewResourceDialog from './NewResourceDialog';
 import './resources.css';
 
 type Status = 'Available' | 'Assigned' | 'In maintenance' | 'Retired';
@@ -58,25 +59,6 @@ function ResourceDrawer({ resource, close }: { resource: Resource; close: () => 
     <div className="rs-drawer-footer"><Button onClick={close}>Close</Button><Button variant="primary" onClick={() => setEditInfo(true)}>Edit resource</Button></div>
     {editInfo && <div className="rs-drawer-inline-overlay" onMouseDown={() => setEditInfo(false)}><div className="rs-edit-notice" role="alertdialog" aria-modal="true" aria-labelledby="rs-edit-notice-title" onMouseDown={event => event.stopPropagation()}><h3 id="rs-edit-notice-title">Edit resource</h3><p>Editing will be enabled after API integration. No sample data will be changed.</p><Button variant="primary" onClick={() => setEditInfo(false)}>Got it</Button></div></div>}
   </aside></div>;
-}
-
-function NewResourceDialog({ close }: { close: () => void }) {
-  const [name, setName] = useState('');
-  const [category, setCategory] = useState('Computers');
-  const [branch, setBranch] = useState('Head Office');
-  const [condition, setCondition] = useState('Good');
-  const [serial, setSerial] = useState('');
-  const [review, setReview] = useState(false);
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') close(); };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [close]);
-  return <div className="rs-overlay rs-modal-overlay" onMouseDown={close}><div className="rs-modal" role="dialog" aria-modal="true" aria-labelledby="rs-create-title" onMouseDown={event => event.stopPropagation()}>
-    <div className="rs-drawer-header"><div><span className="rs-eyebrow">NEW RESOURCE</span><h2 id="rs-create-title">{review ? 'Review resource' : 'Add company resource'}</h2><p>{review ? 'This is a preview and will not be saved.' : 'Record a company asset in the resource catalog.'}</p></div><button className="rs-close" aria-label="Close new resource" onClick={close}><X size={18}/></button></div>
-    <div className="rs-form-body">{review ? <div className="rs-review"><Package size={32}/><h3>{name}</h3><p>{category} · {branch}</p><dl><div><dt>Condition</dt><dd>{condition}</dd></div><div><dt>Serial number</dt><dd>{serial || 'Not provided'}</dd></div></dl><div className="rs-hint">The real save action will be enabled when resource creation is connected to the API.</div></div> : <form id="rs-preview-form" onSubmit={event => { event.preventDefault(); if (name.trim()) setReview(true); }}><div className="rs-form-grid"><label className="rs-field rs-full">Resource name <span>*</span><input required maxLength={100} placeholder="e.g. Dell UltraSharp U2723QE" value={name} onChange={event => setName(event.target.value)}/></label><label className="rs-field rs-full">Serial number <input maxLength={100} placeholder="Enter serial number" value={serial} onChange={event => setSerial(event.target.value)}/></label><div className="rs-field">Category <SelectMenu label="Category" value={category} options={categories.filter(item => item !== 'All categories')} onChange={setCategory}/></div><div className="rs-field">Branch <SelectMenu label="Branch" value={branch} options={branches.filter(item => item !== 'All branches')} onChange={setBranch}/></div><div className="rs-field">Condition <SelectMenu label="Condition" value={condition} options={['Excellent', 'Good', 'Fair', 'Damaged']} onChange={setCondition}/></div></div><div className="rs-hint">This is a UI-only form. Submitting advances to a preview, not the database.</div></form>}</div>
-    <div className="rs-drawer-footer"><span>Design preview</span><div className="rs-dialog-actions">{review && <Button onClick={() => setReview(false)}>Back</Button>}<Button variant="primary" onClick={review ? close : () => (document.getElementById('rs-preview-form') as HTMLFormElement | null)?.requestSubmit()}>{review ? 'Done' : 'Preview resource'}</Button></div></div>
-  </div></div>;
 }
 
 export default function ResourcesPage() {
