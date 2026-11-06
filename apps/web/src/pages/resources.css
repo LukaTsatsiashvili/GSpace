@@ -68,3 +68,8 @@
 .rs-edit-notice{width:min(360px,100%);padding:25px;border:1px solid var(--border);border-radius:14px;background:var(--surface);box-shadow:0 20px 60px #0005}
 .rs-edit-notice h3{margin:0 0 10px;font-size:17px}.rs-edit-notice p{font-size:12px;color:var(--muted);line-height:1.6;margin:0 0 20px}
 @media(max-width:550px){.rs-drawer-identity{padding:17px;align-items:flex-start}.rs-drawer-identity .rs-detail-hero h3{font-size:16px}.rs-drawer-identity .rs-hero-icon{width:48px;height:48px}.rs-drawer-content{padding:20px 17px}.rs-detail-tabs{padding:0 7px}.rs-detail-tabs button{padding:14px 10px;font-size:11px}.rs-drawer-footer{padding:13px 17px}}
+/* Asset register shares the same details panel across all resource states.
+   Scroll the complete panel, including its footer, as in the approved register reference. */
+.rs-drawer{display:block;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain}
+.rs-drawer-content{overflow:visible}
+.rs-drawer-footer{margin-top:0}
