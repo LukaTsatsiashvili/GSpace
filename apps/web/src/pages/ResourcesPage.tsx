@@ -9,7 +9,7 @@ import './resources.css';
 
 type Status = 'Available' | 'Assigned' | 'In maintenance' | 'Retired';
 type View = 'list' | 'grid';
-type Tab = 'Overview' | 'Assignment history' | 'Maintenance';
+type Tab = 'Overview' | 'Assignments' | 'Maintenance' | 'Documents' | 'Audit timeline';
 type Resource = {
   id: string; name: string; category: string; branch: string; status: Status;
   condition: string; assignee: string; location: string; serial: string; purchaseDate: string; icon: LucideIcon;
@@ -43,6 +43,7 @@ function StatusPill({ status }: { status: Status }) {
 
 function ResourceDrawer({ resource, close }: { resource: Resource; close: () => void }) {
   const [tab, setTab] = useState<Tab>('Overview');
+  const [editInfo, setEditInfo] = useState(false);
   const Icon = resource.icon;
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') close(); };
@@ -50,11 +51,12 @@ function ResourceDrawer({ resource, close }: { resource: Resource; close: () => 
     return () => document.removeEventListener('keydown', onKey);
   }, [close]);
   return <div className="rs-overlay" onMouseDown={close}><aside className="rs-drawer" role="dialog" aria-modal="true" aria-labelledby="rs-drawer-title" onMouseDown={event => event.stopPropagation()}>
-    <div className="rs-drawer-header"><div><span className="rs-eyebrow">RESOURCE DETAILS</span><h2 id="rs-drawer-title">Asset information</h2><p>Illustrative asset record and lifecycle history</p></div><button className="rs-close" aria-label="Close resource details" onClick={close}><X size={18}/></button></div>
-    <div className="rs-drawer-content"><div className="rs-detail-hero"><span className="rs-hero-icon"><Icon size={29}/></span><div><h3>{resource.name}</h3><span>{resource.id} · {resource.category}</span></div></div><StatusPill status={resource.status}/>
-      <div className="rs-detail-tabs" role="tablist">{(['Overview', 'Assignment history', 'Maintenance'] as Tab[]).map(item => <button role="tab" aria-selected={tab === item} className={tab === item ? 'active' : ''} key={item} onClick={() => setTab(item)}>{item}</button>)}</div>
-      {tab === 'Overview' ? <div className="rs-detail-section"><h4>General information</h4><dl className="rs-detail-fields"><div><dt>Asset ID</dt><dd>{resource.id}</dd></div><div><dt>Serial number</dt><dd>{resource.serial}</dd></div><div><dt>Category</dt><dd>{resource.category}</dd></div><div><dt>Condition</dt><dd>{resource.condition}</dd></div><div><dt>Branch</dt><dd>{resource.branch}</dd></div><div><dt>Assigned to</dt><dd>{resource.assignee}</dd></div><div><dt>Purchase date</dt><dd>{resource.purchaseDate}</dd></div><div><dt>Status</dt><dd>{resource.status}</dd></div></dl></div> : <div className="rs-tab-empty"><ClipboardList size={25}/><strong>{tab}</strong><p>Detailed records will be connected after the API workflow is implemented.</p></div>}
-    </div><div className="rs-drawer-footer"><span>Sample data · read-only preview</span><Button onClick={close}>Close</Button></div>
+    <div className="rs-drawer-header"><div><h2 id="rs-drawer-title">Resource details</h2><p>Asset register / {resource.id}</p></div><button className="rs-close" aria-label="Close resource details" onClick={close}><X size={18}/></button></div>
+    <div className="rs-drawer-identity"><div className="rs-detail-hero"><span className="rs-hero-icon"><Icon size={24}/></span><div><h3>{resource.name}</h3><span>{resource.id} · {resource.category}</span></div></div><StatusPill status={resource.status}/></div>
+    <div className="rs-detail-tabs" role="tablist">{(['Overview', 'Assignments', 'Maintenance', 'Documents', 'Audit timeline'] as Tab[]).map(item => <button role="tab" aria-selected={tab === item} className={tab === item ? 'active' : ''} key={item} onClick={() => setTab(item)}>{item}</button>)}</div>
+    <div className="rs-drawer-content">{tab === 'Overview' ? <><div className="rs-detail-section"><h4>General information</h4><dl className="rs-detail-fields"><div><dt>Asset ID</dt><dd>{resource.id}</dd></div><div><dt>Serial number</dt><dd>{resource.id === 'AST-00124' ? 'PF-92L7Q' : resource.serial}</dd></div><div><dt>Category</dt><dd>{resource.category}</dd></div><div><dt>Condition</dt><dd>{resource.condition}</dd></div><div><dt>Branch</dt><dd>{resource.branch}</dd></div><div><dt>Location</dt><dd>{resource.location}</dd></div><div><dt>Assigned to</dt><dd>{resource.assignee}</dd></div><div><dt>Registered</dt><dd>Oct 18, 2026</dd></div></dl></div><div className="rs-lifecycle"><h4>Resource lifecycle</h4><ol><li><strong>Resource registered</strong><span>Oct 18, 2026 · System Administrator</span></li><li><strong>Condition reviewed</strong><span>{resource.condition} · Sample timeline event</span></li></ol></div></> : <div className="rs-tab-empty"><ClipboardList size={25}/><strong>{tab}</strong><p>This section will display real resource records when connected to the API.</p></div>}</div>
+    <div className="rs-drawer-footer"><Button onClick={close}>Close</Button><Button variant="primary" onClick={() => setEditInfo(true)}>Edit resource</Button></div>
+    {editInfo && <div className="rs-drawer-inline-overlay" onMouseDown={() => setEditInfo(false)}><div className="rs-edit-notice" role="alertdialog" aria-modal="true" aria-labelledby="rs-edit-notice-title" onMouseDown={event => event.stopPropagation()}><h3 id="rs-edit-notice-title">Edit resource</h3><p>Editing will be enabled after API integration. No sample data will be changed.</p><Button variant="primary" onClick={() => setEditInfo(false)}>Got it</Button></div></div>}
   </aside></div>;
 }
 
