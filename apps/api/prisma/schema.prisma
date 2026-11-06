@@ -1,0 +1,58 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Role {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  name      String
+  users     User[]
+  createdAt DateTime @default(now())
+}
+
+model Branch {
+  id        String     @id @default(uuid())
+  name      String
+  code      String     @unique
+  users     User[]
+  resources Resource[]
+  createdAt DateTime   @default(now())
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  fullName  String
+  active    Boolean  @default(true)
+  roleId    String
+  branchId  String
+  role      Role     @relation(fields: [roleId], references: [id])
+  branch    Branch   @relation(fields: [branchId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Resource {
+  id          String         @id @default(uuid())
+  assetCode   String         @unique
+  name        String
+  category    String
+  status      ResourceStatus @default(AVAILABLE)
+  branchId    String
+  branch      Branch         @relation(fields: [branchId], references: [id])
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+}
+
+enum ResourceStatus {
+  AVAILABLE
+  ASSIGNED
+  IN_TRANSFER
+  IN_MAINTENANCE
+  RETIRED
+}
