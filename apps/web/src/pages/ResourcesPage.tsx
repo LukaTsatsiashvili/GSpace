@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { Badge, Button, Card, PageHeader, Select } from '../components/ui';
 import NewResourceDialog from './NewResourceDialog';
+import BulkResourceDialog from './BulkResourceDialog';
 import './resources.css';
 
 type Status = 'Available' | 'Assigned' | 'In maintenance' | 'Retired';
@@ -85,6 +86,6 @@ export default function ResourcesPage() {
     <p className="rs-preview-note"><Badge tone="blue">UI preview</Badge> Resource records and actions are illustrative. Database writes are not enabled.</p>
     {selected && <ResourceDrawer resource={selected} close={() => setSelected(null)}/>}{adding && <NewResourceDialog close={() => setAdding(false)}/>}
     {exportInfo && <div className="rs-overlay rs-modal-overlay" onMouseDown={() => setExportInfo(false)}><div className="rs-export-dialog" role="dialog" aria-modal="true" aria-labelledby="rs-export-title" onMouseDown={event => event.stopPropagation()}><button className="rs-close" aria-label="Close export information" onClick={() => setExportInfo(false)}><X size={18}/></button><span className="rs-export-icon"><ArrowDownToLine size={24}/></span><h2 id="rs-export-title">Export report</h2><p>Report exports will be available when the resource catalog is connected to the API. This preview uses illustrative records only.</p><Button variant="primary" onClick={() => setExportInfo(false)}>Got it</Button></div></div>}
-    {bulkInfo && <div className="rs-overlay rs-modal-overlay" onMouseDown={() => setBulkInfo(false)}><div className="rs-export-dialog" role="dialog" aria-modal="true" aria-labelledby="rs-bulk-title" onMouseDown={event => event.stopPropagation()}><button className="rs-close" aria-label="Close bulk create information" onClick={() => setBulkInfo(false)}><X size={18}/></button><span className="rs-export-icon"><ClipboardList size={24}/></span><h2 id="rs-bulk-title">Bulk create</h2><p>Bulk resource import will be available after API integration. No sample records are saved.</p><Button variant="primary" onClick={() => setBulkInfo(false)}>Got it</Button></div></div>}
+    {bulkInfo && <BulkResourceDialog close={() => setBulkInfo(false)}/>}
   </div>;
 }
