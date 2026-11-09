@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Check, Download, ShieldCheck, Wallet, X } from 'lucide-react';
-import { Button, Input, Select, Textarea } from '../components/ui';
+import { Button, Input, NumberInput, Select, Textarea } from '../components/ui';
 import './new-resource.css';
 
 type FormData = {
@@ -40,7 +40,9 @@ export default function NewResourceDialog({ close }: { close: () => void }) {
   const fileInput = useRef<HTMLInputElement>(null);
   const content = useRef<HTMLDivElement>(null);
   const update = (key: keyof FormData) => (value: string) => { setForm(current => ({ ...current, [key]: value })); setError(''); };
-  const field = (key: keyof FormData, placeholder = '', type = 'text') => <Input type={type} placeholder={placeholder} value={form[key]} onChange={event => update(key)(event.target.value)}/>;
+  const field = (key: keyof FormData, placeholder = '', type = 'text') => type === 'number'
+    ? <NumberInput step={key === 'usefulLife' ? 1 : '0.01'} min={0} inputMode={key === 'usefulLife' ? 'numeric' : 'decimal'} placeholder={placeholder} value={form[key]} onChange={event => update(key)(event.target.value)}/>
+    : <Input type={type} placeholder={placeholder} value={form[key]} onChange={event => update(key)(event.target.value)}/>;
   const go = (next: number) => { setStep(next); setError(''); content.current?.scrollTo({ top: 0 }); };
   const continueStep = () => {
     if (step === 0 && !form.name.trim()) { setError('Please enter a resource name.'); return; }
