@@ -20,7 +20,7 @@
 /* Shared SearchInput: the wrapper alone owns the border and focus state. */
 .ui-search{display:flex;align-items:center;gap:10px;min-width:0;min-height:40px;padding:0 12px;border:1px solid var(--border);border-radius:9px;background:var(--surface);color:var(--muted);transition:border-color .15s,box-shadow .15s}
 .ui-search:hover{border-color:color-mix(in srgb,var(--accent) 26%,var(--border))}
-.ui-search:focus-within{border-color:var(--accent);box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 55%,transparent)}
+.ui-search:focus-within{border-color:var(--accent);box-shadow:none}
 .ui-search>svg{flex:none;pointer-events:none}
 .ui-search .ui-input,.ui-search .ui-input:hover,.ui-search .ui-input:focus{display:block;flex:1;width:100%;min-width:0;min-height:36px;padding:7px 0;border:0;outline:0;border-radius:0;box-shadow:none!important;background:transparent;font-size:12px;color:var(--text)}
 .ui-search input[type=search]::-webkit-search-cancel-button{cursor:pointer}
