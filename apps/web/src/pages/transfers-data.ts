@@ -92,5 +92,13 @@ export const availableAssets = [
   { id: 'AST-00119', name: 'Samsung Galaxy Tab S9', location: 'Head Office' },
   { id: 'AST-00118', name: 'Cisco Catalyst 9200', location: 'Head Office' },
   { id: 'AST-00116', name: 'Logitech MX Keys', location: 'Head Office' },
-  { id: 'AST-00115', name: 'Barcode Scanner', location: 'Head Office' }
+  { id: 'AST-00115', name: 'Barcode Scanner', location: 'Head Office' },
+  { id: 'AST-00122', name: 'Apple iPhone 15', location: 'Tbilisi Store 01' },
+  { id: 'AST-00132', name: 'HP LaserJet Pro', location: 'Tbilisi Store 01' },
+  { id: 'AST-00108', name: 'POS Tablet', location: 'Kutaisi Store 01' },
+  { id: 'AST-00133', name: 'Dell Latitude 5440', location: 'Kutaisi Store 01' },
+  { id: 'AST-00134', name: 'Zebra Barcode Scanner', location: 'Batumi Store 01' },
+  { id: 'AST-00135', name: 'Logitech MX Master 3S', location: 'Batumi Store 01' },
+  { id: 'AST-00109', name: 'HP EliteBook 840', location: 'Central Warehouse' },
+  { id: 'AST-00136', name: 'Cisco Meraki MX67', location: 'Central Warehouse' }
 ];
