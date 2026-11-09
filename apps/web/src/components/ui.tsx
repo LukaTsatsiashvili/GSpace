@@ -87,8 +87,8 @@ export function PageHeader({ eyebrow, title, description, actions, badgeLabel = 
   </div>;
 }
 
-export function SectionTabs({ tabs, selected, onChange }: { tabs: readonly string[]; selected: string; onChange: (tab: string) => void }) {
-  return <div className="section-tabs" role="tablist" aria-label="Section views">{tabs.map((tab) => <button key={tab} role="tab" aria-selected={selected === tab} className={`section-tab ${selected === tab ? 'active' : ''}`} onClick={() => onChange(tab)}>{tab}</button>)}</div>;
+export function SectionTabs({ tabs, selected, onChange, counts = {} }: { tabs: readonly string[]; selected: string; onChange: (tab: string) => void; counts?: Partial<Record<string, number>> }) {
+  return <div className="section-tabs" role="tablist" aria-label="Section views">{tabs.map((tab) => <button key={tab} role="tab" aria-selected={selected === tab} className={`section-tab ${selected === tab ? 'active' : ''}`} onClick={() => onChange(tab)}>{tab}{counts[tab] !== undefined && <span className="section-tab-count">{counts[tab]}</span>}</button>)}</div>;
 }
 
 export function EmptyState({ title, description }: { title: string; description: string }) {
