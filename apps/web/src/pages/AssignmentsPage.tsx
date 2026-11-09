@@ -121,22 +121,25 @@ function NewAssignmentDialog({ close }: { close: () => void }) {
   const selectedAssets = availableAssets.filter(asset => chosen.includes(asset.id));
 
   return <div className="as-overlay as-center-overlay" onMouseDown={close}>
-    <section className="as-create-dialog" role="dialog" aria-modal="true" aria-labelledby="as-create-title" onMouseDown={event => event.stopPropagation()}>
-      <header className="as-dialog-header"><div><Badge tone="blue">NEW ASSIGNMENT</Badge><h2 id="as-create-title">Issue company resources</h2><p>Create a handover that the recipient confirms item by item.</p></div><button className="as-close" type="button" aria-label="Close new assignment" onClick={close}><X size={17}/></button></header>
+    <section className={`as-create-dialog ${review ? "as-handover-review" : ""}`} role="dialog" aria-modal="true" aria-labelledby="as-create-title" onMouseDown={event => event.stopPropagation()}>
+      <header className="as-dialog-header"><div><Badge tone="blue">{review ? "HANDOVER PREVIEW" : "NEW ASSIGNMENT"}</Badge><h2 id="as-create-title">{review ? "Review new assignment" : "Issue company resources"}</h2><p>{review ? "Ready to issue · confirmation required" : "Create a handover that the recipient confirms item by item."}</p></div><button className="as-close" type="button" aria-label="Close new assignment" onClick={close}><X size={17}/></button></header>
       <div className="as-dialog-content">
         {review ? <>
-          <h3 className="as-form-heading">Review handover</h3>
-          <p className="as-form-help">Check the selected details. This is a design preview; no assignment is being created.</p>
-          <div className="as-review-summary">
-            <div><span>Handover type</span><strong>{type}</strong></div>
+          <div className="as-review-facts">
+            <div><span>Type</span><strong>{type === 'Issue from branch' ? 'New issue' : 'Employee-to-employee'}</strong></div>
             <div><span>Recipient</span><strong>{recipient}</strong></div>
-            <div><span>Return due</span><strong>{due || 'Not specified'}</strong></div>
+            <div><span>Selected assets</span><strong>{selectedAssets.length}</strong></div>
+            <div><span>Return due</span><strong>{due ? new Date(due + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : 'Not set'}</strong></div>
             <div><span>Condition on issue</span><strong>{condition}</strong></div>
-            <div className="as-review-full"><span>Handover notes</span><strong>{notes.trim() || 'None'}</strong></div>
           </div>
-          <h3 className="as-form-heading">Selected resources ({selectedAssets.length})</h3>
-          <div className="as-picked-list">{selectedAssets.map(asset => <div key={asset.id}><Box size={16}/><div><strong>{asset.name}</strong><small>{asset.id} · Condition: {asset.condition}</small></div><Check size={16}/></div>)}</div>
-          <p className="as-review-disclaimer">Submitting a real handover, recording custody and sending confirmation requests require the authenticated API.</p>
+          <h3 className="as-review-heading">Items for confirmation</h3>
+          <div className="as-confirmation-items">{selectedAssets.map(asset => <div className="as-confirmation-item" key={asset.id}>
+            <span className="as-review-asset-icon"><Box size={19}/></span>
+            <div><strong>{asset.name}</strong><small>{asset.id}</small></div>
+            <span className="as-needs-confirmation">Needs confirmation</span>
+          </div>)}</div>
+          {notes.trim() && <p className="as-review-notes"><strong>Handover notes:</strong> {notes.trim()}</p>}
+          <p className="as-review-disclaimer">In production, the recipient will be notified and can accept each resource separately. No automatic approval is performed when a deadline expires. This preview does not send notifications or create an assignment.</p>
         </> : <>
           <Field title="Handover type"><div className="as-type-switch" role="group" aria-label="Handover type">
             {(['Issue from branch', 'Employee-to-employee'] as HandoverType[]).map(option => <button type="button" key={option} aria-pressed={type === option} className={type === option ? 'selected' : ''} onClick={() => setType(option)}>{option}</button>)}
@@ -157,8 +160,81 @@ function NewAssignmentDialog({ close }: { close: () => void }) {
           {error && <p className="as-form-error" role="alert">{error}</p>}
         </>}
       </div>
-      <footer className="as-dialog-footer"><span>Design-only workflow · no records saved</span><div>{review && <Button onClick={() => setReview(false)}>Back</Button>}<Button variant="primary" onClick={() => review ? setPreview(true) : showReview()}>{review ? 'Preview handover' : 'Review handover'} <span aria-hidden="true">→</span></Button></div></footer>
-      {preview && <PreviewNotice heading="Handover preview ready" body="The handover has been reviewed but has not been issued. Database records, notifications and audit events are not created in this UI-only prototype." close={() => setPreview(false)}/>}
+      <footer className="as-dialog-footer as-handover-footer">
+        {review ? <Button onClick={() => setReview(false)}>Back to edit</Button> : <span>Design-only workflow · no records saved</span>}
+        <Button variant="primary" onClick={() => review ? setPreview(true) : showReview()}>{review ? 'Preview issue ✓' : 'Review handover →'}</Button>
+      </footer>
+      {preview && <PreviewNotice heading="Issue preview ready" body="The handover has been reviewed but has not been issued. Database records, notifications and audit events are not created in this UI-only prototype." close={() => setPreview(false)}/>}
+    </section>
+  </div>;
+}
+
+
+type ReceiptDecision = 'Accept' | 'Report issue' | 'Decide later';
+const receiptOptions: ReceiptDecision[] = ['Accept', 'Report issue', 'Decide later'];
+
+function ReceiptConfirmationDialog({ assignment, close }: { assignment: Assignment; close: () => void }) {
+  // All selections and files remain local to this design preview.
+  const [decisions, setDecisions] = useState<Record<string, ReceiptDecision>>(() =>
+    Object.fromEntries(assignment.assets.map(asset => [asset.id, asset.receipt === 'Accepted' ? 'Accept' : 'Decide later']))
+  );
+  const [evidence, setEvidence] = useState<Record<string, File | undefined>>({});
+  const [notes, setNotes] = useState('');
+  const [review, setReview] = useState(false);
+  const [error, setError] = useState('');
+
+  const updateDecision = (id: string, value: ReceiptDecision) => {
+    setDecisions(current => ({ ...current, [id]: value }));
+    setError('');
+  };
+  const previewReceipt = () => {
+    const missing = assignment.assets.find(asset => asset.condition === 'Damaged' && decisions[asset.id] === 'Report issue' && !evidence[asset.id]);
+    if (missing) { setError('Photo evidence is required for a damaged resource: ' + missing.name); return; }
+    setReview(true);
+    setError('');
+  };
+
+  return <div className="as-overlay as-center-overlay as-receipt-overlay" onMouseDown={close}>
+    <section className="as-receipt-dialog" role="dialog" aria-modal="true" aria-labelledby="as-receipt-title" onMouseDown={event => event.stopPropagation()}>
+      <header className="as-dialog-header"><div>
+        <Badge tone="blue">{review ? 'RECEIPT PREVIEW' : 'RECEIPT CONFIRMATION'}</Badge>
+        <h2 id="as-receipt-title">{review ? 'Review confirmation choices' : 'Review received resources'}</h2>
+        <p>{review ? 'Confirmation preview · no changes saved' : 'Each item can be accepted or marked with an issue separately.'}</p>
+      </div><button type="button" className="as-close" aria-label="Close receipt confirmation" onClick={close}><X size={17}/></button></header>
+      <div className="as-receipt-content">
+        {review ? <>
+          <p className="as-form-help">Review the item-by-item decisions below. Production confirmation will require authenticated permissions and auditing.</p>
+          <div className="as-receipt-items">{assignment.assets.map(asset => <div className="as-receipt-item" key={asset.id}>
+            <span className="as-review-asset-icon"><Box size={18}/></span>
+            <div className="as-receipt-item-copy"><strong>{asset.name}</strong><small>{asset.id} · Reported condition: {asset.condition}</small>
+              {evidence[asset.id] && <small>Local photo: {evidence[asset.id]?.name}</small>}
+            </div>
+            <span className={'as-decision-tag ' + (decisions[asset.id] === 'Accept' ? 'accept' : decisions[asset.id] === 'Report issue' ? 'issue' : 'later')}>{decisions[asset.id]}</span>
+          </div>)}</div>
+          {notes.trim() && <p className="as-review-notes"><strong>Notes:</strong> {notes.trim()}</p>}
+          <p className="as-receipt-hint">Preview only. No employee acceptance, issue report, file upload or notification has been saved.</p>
+        </> : <>
+          <div className="as-receipt-items">{assignment.assets.map(asset => <div className="as-receipt-item-wrap" key={asset.id}>
+            <div className="as-receipt-item">
+              <span className="as-review-asset-icon"><Box size={18}/></span>
+              <div className="as-receipt-item-copy"><strong>{asset.name}</strong><small>Reported condition: {asset.condition}</small></div>
+              <Select label={'Receipt decision for ' + asset.name} value={decisions[asset.id]} options={receiptOptions} onChange={value => updateDecision(asset.id, value as ReceiptDecision)}/>
+            </div>
+            {decisions[asset.id] === 'Report issue' && <div className="as-receipt-evidence">
+              <label htmlFor={'as-evidence-' + asset.id}>Photo evidence {asset.condition === 'Damaged' ? '(required for damaged items)' : '(optional)'}</label>
+              <Input id={'as-evidence-' + asset.id} type="file" accept="image/*" onChange={event => setEvidence(current => ({ ...current, [asset.id]: event.target.files?.[0] }))}/>
+              <small>Selected files are only displayed locally, never uploaded.</small>
+            </div>}
+          </div>)}</div>
+          <p className="as-receipt-hint">Photo evidence is optional for normal condition, required for damaged items. A reported issue is recorded for manager review in the future production workflow.</p>
+          <label className="as-field as-receipt-notes"><span>Notes (optional)</span><Textarea placeholder="Add context about the handover" rows={3} value={notes} onChange={event => setNotes(event.target.value)}/></label>
+          {error && <p className="as-form-error" role="alert">{error}</p>}
+        </>}
+      </div>
+      <footer className="as-dialog-footer as-receipt-footer">
+        <Button onClick={() => review ? setReview(false) : close()}>{review ? 'Back to edit' : 'Back'}</Button>
+        <Button variant="primary" onClick={() => review ? close() : previewReceipt()}>{review ? 'Close preview' : 'Preview confirmation'}</Button>
+      </footer>
     </section>
   </div>;
 }
@@ -186,7 +262,8 @@ function AssignmentDrawer({ assignment, close }: { assignment: Assignment; close
       <p className="as-detail-hint">Each resource is confirmed separately. Condition is recorded at issue and reviewed again when returned. A PDF handover record is part of the approved production workflow.</p>
     </div>
     <footer className="as-drawer-footer"><Button onClick={close}>Close</Button>{primaryAction && <Button variant="primary" onClick={() => setAction(primaryAction)}>{primaryAction}</Button>}</footer>
-    {action && <PreviewNotice heading={action} body={'The ' + action.toLowerCase() + ' workflow will be enabled after the authenticated API, role permissions and audit events are implemented. No record has been updated.'} close={() => setAction(null)}/>}
+    {action === 'Review receipt' ? <ReceiptConfirmationDialog assignment={assignment} close={() => setAction(null)}/> :
+      action && <PreviewNotice heading={action} body={'The ' + action.toLowerCase() + ' workflow will be enabled after the authenticated API, role permissions and audit events are implemented. No record has been updated.'} close={() => setAction(null)}/>}
   </aside></div>;
 }
 
