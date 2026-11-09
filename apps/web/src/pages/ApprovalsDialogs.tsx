@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ArrowRight, ClipboardCheck, Paperclip, UploadCloud, X } from 'lucide-react';
-import { Badge, Button, Input, Select, Textarea } from '../components/ui';
+import { Badge, Button, Input, NumberInput, Select, Textarea } from '../components/ui';
 import { approvalTypes, branches, currency, deadlines, deadlineBehaviors, type ApprovalPattern, type ApprovalRequest, type RequestType } from './approvals-data';
 
 export function useApprovalEscape(close: () => void) {
@@ -106,7 +106,7 @@ export function NewRequestDialog({ close }: { close: () => void }) {
               <Field label="Request type" required><Select label="Request type" value={typeName} options={approvalTypes.filter(item => item.active).map(item => item.name)} onChange={next => { setTypeName(next); setAdditionalFields({}); setError(''); }}/></Field>
               <Field label="Branch"><Select label="Branch" value={branch} options={branches} onChange={setBranch}/></Field>
               <Field label="Request title" required><Input value={title} onChange={e => { setTitle(e.target.value); setError(''); }} placeholder="e.g. New laptop for store"/></Field>
-              <Field label="Estimated amount"><Input type="number" min="0" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} placeholder="e.g. 4250 GEL"/></Field>
+              <Field label="Estimated amount"><NumberInput min={0} step="0.01" value={amount} onChange={e => setAmount(e.target.value)} placeholder="e.g. 4250 GEL"/></Field>
               <div className="ap-full"><Field label="Business justification" required><Textarea rows={3} value={reason} onChange={e => { setReason(e.target.value); setError(''); }} placeholder="What is needed and why?"/></Field></div>
             </div>
           </section>
