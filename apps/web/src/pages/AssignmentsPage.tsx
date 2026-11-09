@@ -188,7 +188,7 @@ function ReceiptConfirmationDialog({ assignment, close }: { assignment: Assignme
     setError('');
   };
   const previewReceipt = () => {
-    const missing = assignment.assets.find(asset => asset.condition === 'Damaged' && decisions[asset.id] === 'Report issue' && !evidence[asset.id]);
+    const missing = assignment.assets.find(asset => asset.condition === 'Damaged' && decisions[asset.id] !== 'Decide later' && !evidence[asset.id]);
     if (missing) { setError('Photo evidence is required for a damaged resource: ' + missing.name); return; }
     setReview(true);
     setError('');
@@ -220,7 +220,7 @@ function ReceiptConfirmationDialog({ assignment, close }: { assignment: Assignme
               <div className="as-receipt-item-copy"><strong>{asset.name}</strong><small>Reported condition: {asset.condition}</small></div>
               <Select label={'Receipt decision for ' + asset.name} value={decisions[asset.id]} options={receiptOptions} onChange={value => updateDecision(asset.id, value as ReceiptDecision)}/>
             </div>
-            {decisions[asset.id] === 'Report issue' && <div className="as-receipt-evidence">
+            {(decisions[asset.id] === 'Report issue' || (asset.condition === 'Damaged' && decisions[asset.id] !== 'Decide later')) && <div className="as-receipt-evidence">
               <label htmlFor={'as-evidence-' + asset.id}>Photo evidence {asset.condition === 'Damaged' ? '(required for damaged items)' : '(optional)'}</label>
               <Input id={'as-evidence-' + asset.id} type="file" accept="image/*" onChange={event => setEvidence(current => ({ ...current, [asset.id]: event.target.files?.[0] }))}/>
               <small>Selected files are only displayed locally, never uploaded.</small>
