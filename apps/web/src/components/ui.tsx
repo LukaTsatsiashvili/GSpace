@@ -72,9 +72,9 @@ export function Card({ children, className = '', ...props }: HTMLAttributes<HTML
   return <section className={`ui-card ${className}`} {...props}>{children}</section>;
 }
 
-export function PageHeader({ eyebrow, title, description, actions }: { eyebrow: string; title: string; description: string; actions?: ReactNode }) {
+export function PageHeader({ eyebrow, title, description, actions, badgeLabel = 'UI foundation' }: { eyebrow: string; title: string; description: string; actions?: ReactNode; badgeLabel?: string }) {
   return <div className="page-header">
-    <div className="page-header-copy"><div className="eyebrow">{eyebrow}</div><h1>{title} <Badge>UI foundation</Badge></h1><p>{description}</p></div>
+    <div className="page-header-copy"><div className="eyebrow">{eyebrow}</div><h1>{title} <Badge>{badgeLabel}</Badge></h1><p>{description}</p></div>
     {actions && <div className="page-header-actions">{actions}</div>}
   </div>;
 }
