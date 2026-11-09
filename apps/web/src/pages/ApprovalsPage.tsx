@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { ArrowDownToLine, ArrowLeftRight, Check, CheckCheck, ClipboardList, Clock3, Filter, Plus, X } from 'lucide-react';
 import { Badge, Button, Card, PageHeader, SearchInput, SectionTabs, Select } from '../components/ui';
 import { approvalRequests, approvalTypes, currency, statuses, type ApprovalRequest, type ApprovalStatus, type ApprovalTab, type RequestType } from './approvals-data';
-import { NewRequestDialog, PreviewMessage, RequestTypeDialog, useApprovalEscape } from './ApprovalsDialogs';
+import { NewRequestDialog, PreviewMessage, RequestTypeDialog, ReviewDecisionDialog, useApprovalEscape } from './ApprovalsDialogs';
 import './approvals.css';
 
 const tabs: ApprovalTab[] = ['My approvals', 'All requests', 'Request types'];
@@ -54,7 +54,7 @@ function RequestDrawer({ request, close }: { request: ApprovalRequest; close: ()
       {canReview && <div><Button onClick={() => setAction('Request changes')}>Request changes</Button>
         <Button variant="primary" onClick={() => setAction('Review decision')}>Review decision</Button></div>}
     </footer>
-    {action && <PreviewMessage title={action} description="This approval action is a design preview. No decision, audit event, notification or status change has been saved." close={() => setAction(null)}/>}
+    {action && <ReviewDecisionDialog request={request} initial={action === 'Request changes' ? 'Request changes' : 'Approve'} close={() => setAction(null)}/>}
   </aside></div>;
 }
 
