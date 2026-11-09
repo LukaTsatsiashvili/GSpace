@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Bell, Boxes, ChevronDown, Menu, Moon, Search, Sun, ArrowUpRight } from 'lucide-react';
+import { Bell, Boxes, ChevronDown, Menu, Moon, Sun, ArrowUpRight } from 'lucide-react';
 import { modules, moduleGroups, moduleFromHash } from './modules';
-import { Badge, Card, EmptyState, PageHeader, SectionTabs } from './components/ui';
+import { Badge, Card, EmptyState, PageHeader, SectionTabs, SearchInput } from './components/ui';
 import OverviewPage from './pages/OverviewPage';
 import ResourcesPage from './pages/ResourcesPage';
+import AssignmentsPage from './pages/AssignmentsPage';
 
 type Theme = 'light' | 'dark';
 
@@ -59,13 +60,13 @@ export default function App() {
     </aside>
     <div className="main-area">
       <header className="topbar"><div className="breadcrumbs"><button className="mobile-menu icon-action" aria-label="Open navigation" onClick={() => setMenuOpen(true)}><Menu size={20}/></button><span>Workspace</span><span className="breadcrumb-chevron">›</span><strong>{current.label}</strong></div><div className="top-actions">
-        <div className="global-search"><Search size={17}/><input aria-label="Search modules" placeholder="Search modules..." value={sidebarSearch} onFocus={() => setSearchOpen(true)} onChange={(event) => { setSidebarSearch(event.target.value); setSearchOpen(true); }}/>{searchOpen && sidebarSearch && <div className="search-results">{filteredModules.length ? filteredModules.map(({id,label,icon:Icon})=><button key={id} onClick={()=>navigate(id)}><Icon size={15}/>{label}<ArrowUpRight size={13}/></button>) : <span>No matching modules</span>}</div>}</div>
+        <div className="global-search"><SearchInput aria-label="Search modules" placeholder="Search modules..." value={sidebarSearch} onFocus={() => setSearchOpen(true)} onChange={(event) => { setSidebarSearch(event.target.value); setSearchOpen(true); }}/>{searchOpen && sidebarSearch && <div className="search-results">{filteredModules.length ? filteredModules.map(({id,label,icon:Icon})=><button key={id} onClick={()=>navigate(id)}><Icon size={15}/>{label}<ArrowUpRight size={13}/></button>) : <span>No matching modules</span>}</div>}</div>
         <button className="icon-action" aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`} onClick={toggleTheme}>{theme === 'dark' ? <Sun size={19}/> : <Moon size={19}/>}</button>
         <span className="header-divider"/>
         <button className="icon-action" aria-label="Notifications (not yet connected)" disabled title="Notifications will be added with the backend workflows"><Bell size={19}/></button>
         <div className="profile"><div className="profile-avatar">SP</div><div className="profile-text"><strong>Sandro P.</strong><small>System Administrator · demo</small></div><ChevronDown size={14} className="profile-chevron"/></div>
       </div></header>
-      <main className="content">{current.id === 'overview' ? <OverviewPage navigate={navigate}/> : current.id === 'resources' ? <ResourcesPage/> : <>
+      <main className="content">{current.id === 'overview' ? <OverviewPage navigate={navigate}/> : current.id === 'resources' ? <ResourcesPage/> : current.id === 'assignments' ? <AssignmentsPage/> : <>
         <PageHeader eyebrow={`${current.group} / RESOURCE MANAGEMENT`} title={current.label} description={current.description}/>
         <ModulePage key={current.id} label={current.label}/>
         <div className="preview-notice"><Badge tone="blue">Development build</Badge><span>Visual shell and sample metrics only. All business operations require future authenticated API integration.</span></div>

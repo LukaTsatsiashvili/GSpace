@@ -51,7 +51,7 @@
 .ov-asset-name{display:flex;align-items:center;gap:11px;color:var(--text)}.ov-asset-icon{display:grid;place-items:center;width:34px;height:34px;flex:none;border-radius:9px;background:var(--accent-soft);color:var(--accent)}
 .ov-asset-name strong{display:block;font-size:11px}.ov-asset-name small{display:block;margin-top:4px;color:var(--muted);font-size:10px}
 .ov-status{display:inline-flex;align-items:center;padding:6px 10px;border-radius:7px;font-size:10px;font-weight:800}
-.ov-status.assigned{background:#e8efff;color:#4b70c6}.ov-status.available{background:#dff4e9;color:#25805b}.ov-status.maintenance{background:#fff0da;color:#a67824}
+.ov-status.assigned{background:var(--status-blue-bg);color:var(--status-blue-fg)}.ov-status.available{background:var(--status-success-bg);color:var(--status-success-fg)}.ov-status.maintenance{background:var(--status-warning-bg);color:var(--status-warning-fg)}
 .ov-table-empty{padding:18px;color:var(--muted);font-size:11px}.ov-sample-note{color:var(--muted);font-size:10px;margin-top:14px}
 .ov-modal-backdrop{position:fixed;inset:0;background:#050c17a8;display:grid;place-items:center;padding:18px;z-index:50}
 .ov-modal{width:min(440px,100%);background:var(--surface);border:1px solid var(--border);border-radius:14px;box-shadow:0 24px 70px #0004;color:var(--text)}

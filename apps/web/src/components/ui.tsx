@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ButtonHTMLAttributes, type CSSProperties, type HTMLAttributes, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowRight, Check, ChevronDown, Inbox } from 'lucide-react';
+import { ArrowRight, Check, ChevronDown, Inbox, Search } from 'lucide-react';
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: 'primary' | 'secondary' | 'quiet';
@@ -13,6 +13,14 @@ export function Button({ variant = 'secondary', icon, children, className = '', 
 
 export function Input({ className = '', ...props }: InputHTMLAttributes<HTMLInputElement>) {
   return <input className={`ui-input ${className}`} {...props}/>;
+}
+
+/** Consistent search control: one focus ring, one border, shared sizing and theme tokens. */
+export function SearchInput({ className = '', ...props }: InputHTMLAttributes<HTMLInputElement>) {
+  return <div className={`ui-search ${className}`}>
+    <Search size={16} aria-hidden="true"/>
+    <Input {...props} type={props.type ?? 'search'} className="ui-search-field"/>
+  </div>;
 }
 
 export function Textarea({ className = '', ...props }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
@@ -72,9 +80,9 @@ export function Card({ children, className = '', ...props }: HTMLAttributes<HTML
   return <section className={`ui-card ${className}`} {...props}>{children}</section>;
 }
 
-export function PageHeader({ eyebrow, title, description, actions }: { eyebrow: string; title: string; description: string; actions?: ReactNode }) {
+export function PageHeader({ eyebrow, title, description, actions, badgeLabel = 'UI foundation' }: { eyebrow: string; title: string; description: string; actions?: ReactNode; badgeLabel?: string }) {
   return <div className="page-header">
-    <div className="page-header-copy"><div className="eyebrow">{eyebrow}</div><h1>{title} <Badge>UI foundation</Badge></h1><p>{description}</p></div>
+    <div className="page-header-copy"><div className="eyebrow">{eyebrow}</div><h1>{title} <Badge>{badgeLabel}</Badge></h1><p>{description}</p></div>
     {actions && <div className="page-header-actions">{actions}</div>}
   </div>;
 }
