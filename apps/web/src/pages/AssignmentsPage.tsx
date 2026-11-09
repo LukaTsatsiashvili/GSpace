@@ -207,7 +207,7 @@ export default function AssignmentsPage() {
   const clearFilters = () => { setSearch(''); setBranch('All branches'); };
 
   return <div className="as-page">
-    <PageHeader eyebrow="ASSET LIFECYCLE / HANDOVERS" title="Assignments" description="Issue, acknowledge and return company assets with a clear custody trail." actions={<><Button icon={<ArrowDownToLine size={16}/>} onClick={() => setExportOpen(true)}>Export</Button><Button variant="primary" icon={<Plus size={17}/>} onClick={() => setCreating(true)}>New assignment</Button></>}/>
+    <PageHeader eyebrow="ASSET LIFECYCLE / HANDOVERS" title="Assignments" badgeLabel="UI concept · sample data" description="Issue, acknowledge and return company assets with a clear custody trail." actions={<><Button icon={<ArrowDownToLine size={16}/>} onClick={() => setExportOpen(true)}>Export</Button><Button variant="primary" icon={<Plus size={17}/>} onClick={() => setCreating(true)}>New assignment</Button></>}/>
     <div className="as-summary">
       <Card className="as-stat"><div className="as-stat-top"><span>Active assignments</span><span className="as-stat-icon mint"><UsersRound size={19}/></span></div><strong>164</strong><small>Resources currently in use</small></Card>
       <Card className="as-stat"><div className="as-stat-top"><span>Awaiting confirmation</span><span className="as-stat-icon amber"><Clock3 size={19}/></span></div><strong>12</strong><small>Employees have pending receipts</small></Card>
