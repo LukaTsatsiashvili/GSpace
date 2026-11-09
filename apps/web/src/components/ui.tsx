@@ -15,6 +15,11 @@ export function Input({ className = '', ...props }: InputHTMLAttributes<HTMLInpu
   return <input className={`ui-input ${className}`} {...props}/>;
 }
 
+/** Shared numeric control: hide browser steppers and use one thin focus border. */
+export function NumberInput({ className = '', inputMode = 'decimal', ...props }: Omit<InputHTMLAttributes<HTMLInputElement>, 'type'>) {
+  return <Input {...props} type="number" inputMode={inputMode} className={`ui-number-input ${className}`}/>;
+}
+
 /** Consistent search control: one focus ring, one border, shared sizing and theme tokens. */
 export function SearchInput({ className = '', ...props }: InputHTMLAttributes<HTMLInputElement>) {
   return <div className={`ui-search ${className}`}>
@@ -87,8 +92,8 @@ export function PageHeader({ eyebrow, title, description, actions, badgeLabel = 
   </div>;
 }
 
-export function SectionTabs({ tabs, selected, onChange }: { tabs: readonly string[]; selected: string; onChange: (tab: string) => void }) {
-  return <div className="section-tabs" role="tablist" aria-label="Section views">{tabs.map((tab) => <button key={tab} role="tab" aria-selected={selected === tab} className={`section-tab ${selected === tab ? 'active' : ''}`} onClick={() => onChange(tab)}>{tab}</button>)}</div>;
+export function SectionTabs({ tabs, selected, onChange, counts = {} }: { tabs: readonly string[]; selected: string; onChange: (tab: string) => void; counts?: Partial<Record<string, number>> }) {
+  return <div className="section-tabs" role="tablist" aria-label="Section views">{tabs.map((tab) => <button key={tab} role="tab" aria-selected={selected === tab} className={`section-tab ${selected === tab ? 'active' : ''}`} onClick={() => onChange(tab)}>{tab}{counts[tab] !== undefined && <span className="section-tab-count">{counts[tab]}</span>}</button>)}</div>;
 }
 
 export function EmptyState({ title, description }: { title: string; description: string }) {
