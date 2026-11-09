@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ArrowLeftRight, ArrowRight, Box, Check, CheckCircle2, ClipboardCheck, X } from 'lucide-react';
+import { ArrowRight, Box, Check, ClipboardCheck, X } from 'lucide-react';
 import { Badge, Button, Input, SearchInput, Select, Textarea } from '../components/ui';
-import { availableAssets, destinations, people, routes, type Transfer, type TransferResource } from './transfers-data';
+import { availableAssets, destinations, people, routes, type Transfer } from './transfers-data';
 
 function useDialogEscape(onEscape: () => void) {
   useEffect(() => {
