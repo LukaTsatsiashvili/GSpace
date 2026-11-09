@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { ArrowDownToLine, ArrowLeftRight, Box, Check, Clock3, Plus } from 'lucide-react';
 import { Badge, Button, Card, PageHeader, SearchInput, SectionTabs, Select } from '../components/ui';
 import { destinations, sampleTransfers, statuses, type Transfer, type TransferStatus, type TransferTab } from './transfers-data';
-import { NewTransferDialog, TransferDetails, TransferPreviewMessage, TransferReceiptDialog } from './TransfersDialogs';
+import { NewTransferDialog, TransferDetails, TransferReceiptDialog } from './TransfersDialogs';
 import './transfers.css';
 
 const tabs: TransferTab[] = ['All transfers', 'Awaiting me', 'In progress', 'History'];
