@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { ArrowRight, Box, ClipboardCheck, Warehouse, X } from 'lucide-react';
+import { ArrowRight, Box, ClipboardCheck, X } from 'lucide-react';
 import { Badge, Button, Input, NumberInput, Select, Textarea } from '../components/ui';
 import {
   branches, employees, isLowStock, stockItems,
