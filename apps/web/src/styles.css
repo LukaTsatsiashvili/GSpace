@@ -19,7 +19,7 @@
 /* The shared Input/Textarea own all field borders and focus states. */
 .ui-input{display:block;width:100%;min-width:0;min-height:40px;padding:9px 12px;border:1px solid var(--border);border-radius:9px;background:var(--surface);color:var(--text);font:inherit;font-size:12px;outline:none;box-shadow:none;transition:border-color .15s,background-color .15s}
 .ui-input::placeholder{color:var(--muted);opacity:.85}
-.ui-input:hover:not(:disabled):not(:focus){border-color:color-mix(in srgb,var(--accent) 28%,var(--border))}
+.ui-input:not(.ui-search-field):hover:not(:disabled):not(:focus):not([aria-invalid="true"]){border-color:color-mix(in srgb,var(--accent) 28%,var(--border))}
 .app .ui-input:focus,.app .ui-input:focus-visible{border-color:var(--accent);outline:none;outline-offset:0;box-shadow:none}
 .ui-input:disabled{opacity:.55;cursor:not-allowed;background:var(--surface2)}
 .app .ui-input[aria-invalid="true"],.app .ui-input[aria-invalid="true"]:focus,.app .ui-input[aria-invalid="true"]:focus-visible{border-color:var(--danger);outline:none;box-shadow:none}
@@ -28,6 +28,7 @@
 .ui-number-input.ui-input{-moz-appearance:textfield;appearance:textfield}
 .ui-number-input.ui-input::-webkit-outer-spin-button,.ui-number-input.ui-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 .app .ui-number-input.ui-input:focus,.app .ui-number-input.ui-input:focus-visible{border-color:var(--accent);outline:none;box-shadow:none}
+.app .ui-number-input.ui-input[aria-invalid="true"]:focus,.app .ui-number-input.ui-input[aria-invalid="true"]:focus-visible{border-color:var(--danger)}
 /* Shared SearchInput: the wrapper alone owns the border and focus state. */
 .ui-search{display:flex;align-items:center;gap:10px;min-width:0;min-height:40px;padding:0 12px;border:1px solid var(--border);border-radius:9px;background:var(--surface);color:var(--muted);transition:border-color .15s,box-shadow .15s}
 .ui-search:hover{border-color:color-mix(in srgb,var(--accent) 26%,var(--border))}
