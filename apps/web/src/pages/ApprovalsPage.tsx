@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { ArrowDownToLine, ArrowLeftRight, Check, CheckCheck, ClipboardList, Clock3, Filter, Plus, X } from 'lucide-react';
 import { Badge, Button, Card, PageHeader, SearchInput, SectionTabs, Select } from '../components/ui';
 import { approvalRequests, approvalTypes, currency, statuses, type ApprovalRequest, type ApprovalStatus, type ApprovalTab, type RequestType } from './approvals-data';
-import { NewRequestDialog, PreviewMessage, RequestTypeDialog, ReviewDecisionDialog, useApprovalEscape } from './ApprovalsDialogs';
+import { NewRequestDialog, RequestTypeDialog, ReviewDecisionDialog, useApprovalEscape } from './ApprovalsDialogs';
 import './approvals.css';
 
 const tabs: ApprovalTab[] = ['My approvals', 'All requests', 'Request types'];
