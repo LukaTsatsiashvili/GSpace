@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Box, ClipboardList, Download, ShieldCheck, X } from 'lucide-react';
-import { Button, Input, Select } from '../components/ui';
+import { Button, Input, NumberInput, Select } from '../components/ui';
 import './new-resource.css';
 import './bulk-resource.css';
 
@@ -49,7 +49,7 @@ export default function BulkResourceDialog({ close }: { close: () => void }) {
         {method === 'identical' ? <>
           <div className="nw-fields bw-fields"><label className="nw-field nw-full"><span>Resource name <b>*</b></span><Input placeholder="e.g. Dell Latitude 7440" value={name} onChange={event => { setName(event.target.value); setError(''); }}/></label>
             <label className="nw-field"><span>Category</span><Select label="Category" value={category} options={categories} onChange={setCategory}/></label>
-            <label className="nw-field"><span>Quantity</span><Input type="number" min={1} max={1000} step={1} value={quantity} onChange={event => { setQuantity(event.target.value); setError(''); }}/></label>
+            <label className="nw-field"><span>Quantity</span><NumberInput inputMode="numeric" min={1} max={1000} step={1} value={quantity} onChange={event => { setQuantity(event.target.value); setError(''); }}/></label>
             <label className="nw-field"><span>Branch</span><Select label="Branch" value={branch} options={branches} onChange={setBranch}/></label>
             <label className="nw-field"><span>Condition</span><Select label="Condition" value={condition} options={['Excellent','Good','Fair','Damaged','Poor']} onChange={setCondition}/></label></div>
           <p className="bw-hint">Individual serial numbers and locations are reviewed before final registration.</p>
