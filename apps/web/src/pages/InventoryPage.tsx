@@ -5,7 +5,7 @@ import {
   branches, categories, isLowStock, movements, stockItems, storageLocations,
   type InventoryItem, type InventoryTab, type StorageLocation
 } from './inventory-data';
-import { AddLocationDialog, InventoryNotice, IssueConsumablesDialog, StockItemDrawer, StorageLocationDrawer } from './InventoryDialogs';
+import { AddLocationDialog, IssueConsumablesDialog, StockItemDrawer, StorageLocationDrawer } from './InventoryDialogs';
 import './inventory.css';
 
 const tabs: InventoryTab[] = ['Stock overview', 'Locations', 'Movement history'];
