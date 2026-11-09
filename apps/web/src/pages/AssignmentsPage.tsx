@@ -61,7 +61,12 @@ function useDialogEscape(onEscape: () => void) {
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     const handleKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') { event.stopImmediatePropagation(); onEscape(); }
+      if (event.key === 'Escape') {
+      // A shared Select should dismiss its own menu before the surrounding dialog.
+      if (document.querySelector('.ui-select[aria-expanded="true"]')) return;
+      event.stopImmediatePropagation();
+      onEscape();
+    }
     };
     document.addEventListener('keydown', handleKey);
     return () => { document.body.style.overflow = previousOverflow; document.removeEventListener('keydown', handleKey); };
