@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ArrowRight, Check, ClipboardCheck, FileText, Paperclip, UploadCloud, X } from 'lucide-react';
+import { ArrowRight, ClipboardCheck, Paperclip, UploadCloud, X } from 'lucide-react';
 import { Badge, Button, Input, Select, Textarea } from '../components/ui';
 import { approvalTypes, branches, currency, deadlines, deadlineBehaviors, type ApprovalPattern, type RequestType } from './approvals-data';
 
