@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { ArrowDownToLine, ArrowLeftRight, Box, CalendarDays, Check, CheckCheck, Clock3, FileCheck2, Plus, Search, UsersRound, X } from 'lucide-react';
-import { Badge, Button, Card, Input, PageHeader, SectionTabs, Select, Textarea } from '../components/ui';
+import { ArrowDownToLine, ArrowLeftRight, Box, CalendarDays, Check, CheckCheck, Clock3, FileCheck2, Plus, UsersRound, X } from 'lucide-react';
+import { Badge, Button, Card, Input, PageHeader, SearchInput, SectionTabs, Select, Textarea } from '../components/ui';
 import './assignments.css';
 
 type AssignmentStatus = 'Pending confirmation' | 'Active' | 'Return requested' | 'Completed' | 'Partially accepted';
@@ -221,7 +221,7 @@ export default function AssignmentsPage() {
     </div>
     <Card className="as-catalog">
       <SectionTabs tabs={tabs} selected={tab} onChange={next => setTab(next as AssignmentTab)}/>
-      <div className="as-toolbar"><div className="as-search"><Search size={16}/><Input aria-label="Search assignments" placeholder="Search employee, asset or ID..." value={search} onChange={event => setSearch(event.target.value)}/></div><Select className="as-branch-select" label="Filter branch" options={branches} value={branch} onChange={setBranch}/><div className="as-toolbar-spacer"/><Button onClick={clearFilters}>Clear filters</Button></div>
+      <div className="as-toolbar"><SearchInput className="as-search" aria-label="Search assignments" placeholder="Search employee, asset or ID..." value={search} onChange={event => setSearch(event.target.value)}/><Select className="as-branch-select" label="Filter branch" options={branches} value={branch} onChange={setBranch}/><div className="as-toolbar-spacer"/><Button onClick={clearFilters}>Clear filters</Button></div>
       <div className="as-table-scroll"><table className="as-table"><thead><tr><th>ASSIGNMENT</th><th>EMPLOYEE</th><th>RESOURCES</th><th>ISSUED</th><th>RETURN DUE</th><th>STATUS</th><th aria-label="Actions"/></tr></thead>
         <tbody>{visible.map(assignment => <tr key={assignment.id} role="button" tabIndex={0} aria-label={'Open details for ' + assignment.id} onClick={() => setSelected(assignment)} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelected(assignment); } }}>
           <td><strong>{assignment.id}</strong><small>{assignment.branch}</small></td>
