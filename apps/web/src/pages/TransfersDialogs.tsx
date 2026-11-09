@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ArrowRight, Box, Check, ClipboardCheck, X } from 'lucide-react';
-import { Badge, Button, Input, SearchInput, Select, Textarea } from '../components/ui';
+import { Badge, Button, Input, Select, Textarea } from '../components/ui';
 import { availableAssets, destinations, people, routes, type Transfer } from './transfers-data';
 
 function useDialogEscape(onEscape: () => void) {
@@ -52,7 +52,6 @@ export function NewTransferDialog({ close }: { close: () => void }) {
   const [route, setRoute] = useState<string>('Manager approval');
   const [selected, setSelected] = useState<string[]>([]);
   const [reason, setReason] = useState('');
-  const [assetSearch, setAssetSearch] = useState('');
   const [error, setError] = useState('');
   const [preview, setPreview] = useState(false);
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -63,9 +62,9 @@ export function NewTransferDialog({ close }: { close: () => void }) {
     else close();
   });
 
-  const choices = useMemo(() => availableAssets.filter(item => item.location === source && (item.name + ' ' + item.id).toLowerCase().includes(assetSearch.trim().toLowerCase())), [source, assetSearch]);
+  const choices = useMemo(() => availableAssets.filter(item => item.location === source), [source]);
   const chosen = availableAssets.filter(item => selected.includes(item.id));
-  const chooseSource = (value: string) => { setSource(value); setSelected([]); setError(''); setAssetSearch(''); };
+  const chooseSource = (value: string) => { setSource(value); setSelected([]); setError(''); };
   const toggle = (id: string) => { setSelected(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id]); setError(''); };
   const review = () => {
     if (source === destination) { setError('Source and destination locations must be different.'); return; }
@@ -92,11 +91,10 @@ export function NewTransferDialog({ close }: { close: () => void }) {
           </div>
           <section className="tr-select-resources">
             <div className="tr-picker-title"><strong>Select resources</strong><small>· {selected.length} selected</small></div>
-            <SearchInput aria-label="Search resources for transfer" placeholder="Search available assets..." value={assetSearch} onChange={event => setAssetSearch(event.target.value)}/>
             <div className="tr-resource-picker">{choices.length ? choices.map(item => <label key={item.id} className={'tr-resource-option ' + (selected.includes(item.id) ? 'selected' : '')}>
               <input type="checkbox" checked={selected.includes(item.id)} onChange={() => toggle(item.id)} aria-label={'Select ' + item.name}/>
               <span><strong>{item.name}</strong><small>{item.id} · {item.location}</small></span><Box size={17}/>
-            </label>) : <div className="tr-no-assets">No sample resources are available for this location or search. Try Head Office.</div>}</div>
+            </label>) : <div className="tr-no-assets">No sample resources are available for this location.</div>}</div>
           </section>
           <FormField label="Transfer reason" required><Textarea rows={3} placeholder="Why are these resources being moved?" value={reason} onChange={event => { setReason(event.target.value); setError(''); }}/></FormField>
           <p className="tr-info-hint">Bulk transfers are supported. Recipients accept each resource separately and any rejected item is recorded for follow-up in the future production workflow.</p>
