@@ -15,6 +15,11 @@ export function Input({ className = '', ...props }: InputHTMLAttributes<HTMLInpu
   return <input className={`ui-input ${className}`} {...props}/>;
 }
 
+/** Shared numeric control: hide browser steppers and use one thin focus border. */
+export function NumberInput({ className = '', inputMode = 'decimal', ...props }: Omit<InputHTMLAttributes<HTMLInputElement>, 'type'>) {
+  return <Input {...props} type="number" inputMode={inputMode} className={`ui-number-input ${className}`}/>;
+}
+
 /** Consistent search control: one focus ring, one border, shared sizing and theme tokens. */
 export function SearchInput({ className = '', ...props }: InputHTMLAttributes<HTMLInputElement>) {
   return <div className={`ui-search ${className}`}>
