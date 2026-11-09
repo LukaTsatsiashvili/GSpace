@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ArrowRight, ClipboardCheck, Paperclip, UploadCloud, X } from 'lucide-react';
 import { Badge, Button, Input, Select, Textarea } from '../components/ui';
-import { approvalTypes, branches, currency, deadlines, deadlineBehaviors, type ApprovalPattern, type RequestType } from './approvals-data';
+import { approvalTypes, branches, currency, deadlines, deadlineBehaviors, type ApprovalPattern, type ApprovalRequest, type RequestType } from './approvals-data';
 
 export function useApprovalEscape(close: () => void) {
   useEffect(() => {
@@ -138,6 +138,48 @@ export function NewRequestDialog({ close }: { close: () => void }) {
         <Button variant="primary" onClick={() => review ? setMessage(true) : goToReview()}>{review ? 'Preview submission ✓' : 'Review request →'}</Button>
       </footer>
       {message && <PreviewMessage title="Submission preview ready" description="Your request has been reviewed as a design preview. No request, approval, notification or file has been created or uploaded." close={() => setMessage(false)}/>}
+    </section>
+  </div>;
+}
+
+
+export function ReviewDecisionDialog({ request, initial = 'Approve', close }: { request: ApprovalRequest; initial?: 'Approve' | 'Request changes' | 'Reject'; close: () => void }) {
+  const [decision, setDecision] = useState<'Approve' | 'Request changes' | 'Reject'>(initial);
+  const [comment, setComment] = useState('');
+  const [review, setReview] = useState(false);
+  const [error, setError] = useState('');
+  useApprovalEscape(() => review ? setReview(false) : close());
+  const preview = () => {
+    if (decision !== 'Approve' && !comment.trim()) { setError('Please add a reason for this decision.'); return; }
+    setError('');
+    setReview(true);
+  };
+  return <div className="ap-overlay ap-modal-center" onMouseDown={close}>
+    <section className="ap-modal ap-decision-modal" role="dialog" aria-modal="true" aria-labelledby="ap-decision-title" onMouseDown={e => e.stopPropagation()}>
+      <ModalHeader id="ap-decision-title" eyebrow="APPROVAL DECISION · PREVIEW"
+        title={review ? 'Review approval decision' : 'Review request decision'}
+        subtitle={review ? 'Confirm the chosen decision before closing this preview.' : 'Choose an action. No request status will be updated.'}
+        close={close}/>
+      <div className="ap-modal-content">
+        <div className="ap-decision-summary"><strong>{request.title}</strong><span>{request.id} · {request.requester} · Step {request.step} of {request.totalSteps}</span></div>
+        <h3 className="ap-decision-heading">Decision</h3>
+        {review ? <>
+          <div className="ap-review-route">{decision}</div>
+          <section className="ap-review-section"><h3>Comment</h3><p>{comment.trim() || 'No comment'}</p></section>
+          <p className="ap-compact-hint">Preview only. No decision is saved, and no notifications or audit entries are created.</p>
+        </> : <>
+          <div className="ap-decision-choices" role="group" aria-label="Approval decision">
+            {(['Approve', 'Request changes', 'Reject'] as const).map(value => <button key={value} type="button" aria-pressed={decision === value}
+              className={'ap-decision-option' + (decision === value ? ' selected' : '')} onClick={() => { setDecision(value); setError(''); }}>{value}</button>)}
+          </div>
+          <label className="ap-form-field"><span>Comment {decision === 'Approve' ? '(optional)' : '(required)'}</span>
+            <Textarea value={comment} onChange={e => { setComment(e.target.value); setError(''); }} rows={3} placeholder="Add context for the requester"/></label>
+          {error && <p className="ap-validation" role="alert">{error}</p>}
+          <p className="ap-compact-hint">This is a demonstration of the approval interface; no decision can be submitted without backend authorization.</p>
+        </>}
+      </div>
+      <footer className="ap-modal-foot">{review ? <Button onClick={() => setReview(false)}>Back to edit</Button> : <Button onClick={close}>Close</Button>}
+        <Button variant="primary" onClick={() => review ? close() : preview()}>{review ? 'Close preview' : 'Preview decision'}</Button></footer>
     </section>
   </div>;
 }
