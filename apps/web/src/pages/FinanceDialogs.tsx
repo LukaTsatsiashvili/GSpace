@@ -112,7 +112,7 @@ export function FinanceAssetDrawer({record,close,onRecordPayment}: {record:Finan
           <section className="fn-dialog-section"><h3>Correction & audit</h3><p className="fn-info-banner">
             Only users with financial edit permission may correct recorded costs. A written reason and audit trail are mandatory; earlier values stay in history.
           </p></section>
-        </> : view==='correct' ? <>
+        </> : <>
           <div className="fn-form-grid">
             <Field name="Current purchase value"><Input aria-label="Current purchase value" readOnly value={money(record.value,record.currency)}/></Field>
             <Field name="Corrected purchase value" required><NumberInput aria-label="Corrected purchase value" min={0} step="0.01"
