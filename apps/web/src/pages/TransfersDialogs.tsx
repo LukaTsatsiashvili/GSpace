@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ArrowRight, Box, Check, ClipboardCheck, X } from 'lucide-react';
-import { Badge, Button, Input, Select, Textarea } from '../components/ui';
+import { Badge, Button, Checkbox, Input, Select, Textarea } from '../components/ui';
 import { availableAssets, destinations, people, routes, type Transfer } from './transfers-data';
 
 function useDialogEscape(onEscape: () => void) {
@@ -92,7 +92,7 @@ export function NewTransferDialog({ close }: { close: () => void }) {
           <section className="tr-select-resources">
             <div className="tr-picker-title"><strong>Select resources</strong><small>· {selected.length} selected</small></div>
             <div className="tr-resource-picker">{choices.length ? choices.map(item => <label key={item.id} className={'tr-resource-option ' + (selected.includes(item.id) ? 'selected' : '')}>
-              <input type="checkbox" checked={selected.includes(item.id)} onChange={() => toggle(item.id)} aria-label={'Select ' + item.name}/>
+              <Checkbox checked={selected.includes(item.id)} onChange={() => toggle(item.id)} aria-label={'Select ' + item.name}/>
               <span><strong>{item.name}</strong><small>{item.id} · {item.location}</small></span><Box size={17}/>
             </label>) : <div className="tr-no-assets">No sample resources are available for this location.</div>}</div>
           </section>

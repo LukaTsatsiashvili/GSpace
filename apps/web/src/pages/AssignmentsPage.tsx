@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ArrowDownToLine, ArrowLeftRight, Box, CalendarDays, Check, CheckCheck, Clock3, FileCheck2, Plus, UsersRound, X } from 'lucide-react';
-import { Badge, Button, Card, Input, PageHeader, SearchInput, SectionTabs, Select, Textarea } from '../components/ui';
+import { Badge, Button, Card, Checkbox, Input, PageHeader, SearchInput, SectionTabs, Select, Textarea } from '../components/ui';
 import './assignments.css';
 
 type AssignmentStatus = 'Pending confirmation' | 'Active' | 'Return requested' | 'Completed' | 'Partially accepted';
@@ -147,7 +147,7 @@ function NewAssignmentDialog({ close }: { close: () => void }) {
           <Field title="Recipient"><Select label="Recipient" value={recipient} options={recipients} onChange={value => { setRecipient(value); setError(''); }}/></Field>
           <section className="as-asset-picker"><div className="as-asset-title"><strong>Choose available resources</strong><Badge>{chosen.length} selected</Badge></div>
             <div className="as-asset-list">{availableAssets.map(asset => <label className={'as-asset-choice ' + (chosen.includes(asset.id) ? 'chosen' : '')} key={asset.id}>
-              <input type="checkbox" checked={chosen.includes(asset.id)} onChange={() => toggle(asset.id)} aria-label={'Select ' + asset.name}/>
+              <Checkbox checked={chosen.includes(asset.id)} onChange={() => toggle(asset.id)} aria-label={'Select ' + asset.name}/>
               <span className="as-choice-text"><strong>{asset.name}</strong><small>{asset.id} · Condition: {asset.condition}</small></span>
               <Box size={17} aria-hidden="true"/>
             </label>)}</div>

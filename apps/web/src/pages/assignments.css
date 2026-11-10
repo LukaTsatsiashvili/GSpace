@@ -73,9 +73,6 @@
 .as-asset-choice{display:flex;align-items:center;gap:12px;min-height:51px;padding:11px 13px;border:1px solid var(--border);border-radius:9px;background:var(--surface);cursor:pointer}
 .as-asset-choice:hover{background:var(--surface2);border-color:color-mix(in srgb,var(--accent) 40%,var(--border))}
 .as-asset-choice.chosen{border-color:var(--accent);background:var(--accent-soft)}
-.as-asset-choice input{appearance:none;width:14px;height:14px;flex:none;margin:0;border:1.5px solid var(--muted);border-radius:4px;background:var(--surface);display:grid;place-items:center;cursor:pointer}
-.as-asset-choice input:checked{background:var(--accent);border-color:var(--accent)}
-.as-asset-choice input:checked::after{content:'';width:7px;height:4px;border-left:2px solid white;border-bottom:2px solid white;transform:rotate(-45deg) translateY(-1px)}
 .as-choice-text{display:flex;flex:1;min-width:0;flex-direction:column;gap:4px}
 .as-choice-text strong{font-size:11px;font-weight:800}
 .as-choice-text small{font-size:10px;color:var(--muted)}

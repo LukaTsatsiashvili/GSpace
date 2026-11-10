@@ -15,6 +15,13 @@ export function Input({ className = '', ...props }: InputHTMLAttributes<HTMLInpu
   return <input className={`ui-input ${className}`} {...props}/>;
 }
 
+/** Global native checkbox with consistent GSpace styling (also usable inside labels).
+ *  Preserves keyboard interaction, form semantics, checked/disabled states and aria props.
+ */
+export function Checkbox({ className = '', ...props }: Omit<InputHTMLAttributes<HTMLInputElement>, 'type'>) {
+  return <input {...props} type="checkbox" className={`ui-checkbox ${className}`}/>;
+}
+
 /** Shared numeric control: hide browser steppers and use one thin focus border. */
 export function NumberInput({ className = '', inputMode = 'decimal', ...props }: Omit<InputHTMLAttributes<HTMLInputElement>, 'type'>) {
   return <Input {...props} type="number" inputMode={inputMode} className={`ui-number-input ${className}`}/>;
