@@ -98,7 +98,7 @@ export const incidents: Incident[] = [
   {
     id:'INC-1042',resourceId:'RES-00232',resource:'Dell Latitude 5440',issue:'Malfunction',
     branch:'Tbilisi Store 01',priority:'Medium',reported:'Oct 18, 2026',reporter:'Giorgi Maisuradze',
-    assignedTo:'IT Support',status:'In progress',description:'Battery unexpectedly powers down while charging.',
+    assignedTo:'Operations',status:'In progress',description:'Battery unexpectedly powers down while charging.',
     condition:'In maintenance',provider:'Internal IT',cost:110,currency:'GEL',
     evidence:[],workflowStep:2
   },
