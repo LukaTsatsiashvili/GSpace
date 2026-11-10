@@ -100,6 +100,12 @@
 .fn-asset-drawer{width:min(630px,100%)}
 .fn-expense-drawer{width:min(630px,100%)}
 .fn-form-drawer{width:min(715px,100%)}
+/* Payment form follows the supplied two-column modal and review layouts. */
+.fn-payment-drawer{width:min(715px,100%)}
+.fn-payment-drawer .fn-dialog-body{padding-top:22px}
+.fn-payment-drawer .fn-payment-fields{row-gap:17px;column-gap:14px}
+.fn-payment-drawer .fn-detail-grid{gap:10px}
+.fn-payment-drawer .fn-info-banner{margin-top:19px}
 .fn-dialog-header{flex:none;display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:23px 23px 21px;border-bottom:1px solid var(--border)}
 .fn-dialog-header .ui-badge{background:var(--accent-soft);border:0;color:var(--accent);font-size:9px;font-weight:800;border-radius:6px;padding:6px 9px}
 .fn-dialog-header h2{margin:10px 0 5px;font-size:19px;font-weight:800;line-height:1.3}
