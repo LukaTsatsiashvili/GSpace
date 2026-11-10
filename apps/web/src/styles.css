@@ -24,6 +24,15 @@
 .ui-input:disabled{opacity:.55;cursor:not-allowed;background:var(--surface2)}
 .app .ui-input[aria-invalid="true"],.app .ui-input[aria-invalid="true"]:focus,.app .ui-input[aria-invalid="true"]:focus-visible{border-color:var(--danger);outline:none;box-shadow:none}
 .ui-textarea{min-height:75px;resize:vertical}
+/* Global GSpace Checkbox: one native control for all checkable list items and settings. */
+.ui-checkbox{appearance:none;-webkit-appearance:none;display:grid;place-items:center;flex:none;width:18px;height:18px;margin:0;border:1px solid var(--muted);border-radius:5px;background:var(--surface);color:#fff;cursor:pointer;vertical-align:middle;transition:background-color .15s,border-color .15s}
+.ui-checkbox:hover:not(:disabled):not(:checked){border-color:var(--accent);background:var(--surface2)}
+.ui-checkbox:checked{border-color:var(--accent);background:var(--accent)}
+.ui-checkbox:checked::after{content:"";display:block;width:5px;height:9px;border:solid #fff;border-width:0 2px 2px 0;transform:translateY(-1px) rotate(45deg)}
+.app .ui-checkbox:focus-visible{outline:1px solid var(--accent);outline-offset:2px;box-shadow:none}
+.ui-checkbox:disabled{opacity:.5;cursor:not-allowed}
+.ui-checkbox:disabled:hover{border-color:var(--muted)}
+@media(forced-colors:active){.ui-checkbox{forced-color-adjust:auto;appearance:auto;accent-color:Highlight}}
 /* Shared NumberInput: native numeric validation, no browser steppers or doubled focus ring. */
 .ui-number-input.ui-input{-moz-appearance:textfield;appearance:textfield}
 .ui-number-input.ui-input::-webkit-outer-spin-button,.ui-number-input.ui-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
