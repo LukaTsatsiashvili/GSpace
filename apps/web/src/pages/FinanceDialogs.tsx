@@ -186,7 +186,7 @@ export function RecordPaymentDialog({close,initialRecord}: {close:()=>void;initi
   const toReview=()=>{
     const balance=remaining(selected),payment=Number(amount);
     if(balance<=0){setError('This invoice is already fully paid. Choose an invoice with an outstanding balance.');return;}
-    if(!amount.trim()||!Number.isFinite(payment)||payment<=0||Math.round(payment*100)!==payment*100){
+    if(!/^\d+(?:\.\d{1,2})?$/.test(amount.trim())||!Number.isFinite(payment)||payment<=0){
       setError('Enter a valid positive payment amount with at most two decimal places.');return;
     }
     if(currency!==selected.currency){
