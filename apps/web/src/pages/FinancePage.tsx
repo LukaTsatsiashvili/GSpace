@@ -162,7 +162,7 @@ export default function FinancePage() {
         <div className="fn-analysis-grid">
           <div className="fn-panel"><h2>Costs by month · sample GEL equivalent</h2>
             <div className="fn-month-bars">{monthlyCosts.map(item=><div className="fn-month-column" key={item.month}>
-              <strong>{item.thousands}k</strong><div className="fn-month-bar" style={{height:(item.thousands/100*100)+'%'}}/>
+              <strong>{item.thousands}k</strong><div className="fn-month-bar" style={{height:(item.thousands/100*130)+'px'}}/>
               <small>{item.month}</small></div>)}</div>
           </div>
           <div className="fn-panel"><h2>Top spend categories</h2><div className="fn-category-bars">{topCategories.map(item=><div key={item.name} className="fn-category-row">
