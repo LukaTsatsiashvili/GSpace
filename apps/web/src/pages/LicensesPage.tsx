@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type KeyboardEvent } from 'react';
 import { ArrowDownToLine, ArrowLeftRight, CalendarClock, CreditCard, KeyRound, Plus, UsersRound } from 'lucide-react';
 import { Badge, Button, Card, PageHeader, SearchInput, SectionTabs, Select } from '../components/ui';
-import { currencyText, expenses, initials, licenseTabs, licenses, type LicenseRecord, type LicenseTab, type LicenseStatus } from './licenses-data';
+import { currencyText, expenses, licenseTabs, licenses, type LicenseRecord, type LicenseTab, type LicenseStatus } from './licenses-data';
 import { AddLicenseDialog, LicenseDialog, LicenseNotice } from './LicensesDialogs';
 import './licenses.css';
 
@@ -47,7 +47,7 @@ export default function LicensesPage() {
   function open(license: LicenseRecord, view: 'details' | 'renewal' | 'seats' = 'details') {
     setActive(license); setActiveView(view);
   }
-  function keyOpen(event: React.KeyboardEvent<HTMLTableRowElement>, license: LicenseRecord) {
+  function keyOpen(event: KeyboardEvent<HTMLTableRowElement>, license: LicenseRecord) {
     if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); open(license); }
   }
   const exportNotice = 'Exports are a design preview only. A real export requires connected and authorized license data.';
