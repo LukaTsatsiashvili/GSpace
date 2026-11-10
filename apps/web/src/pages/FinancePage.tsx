@@ -6,7 +6,7 @@ import {
   monthlyCosts, paymentStatus, paymentStatuses, remaining, topCategories,
   type FinanceTab, type FinancialAsset, type OperatingExpense, type PaymentStatus
 } from './finance-data';
-import { DepreciationPolicyDialog, FinanceAssetDrawer, FinanceNotice, InvoicePaymentPicker, NewExpenseDialog, OperatingExpenseDrawer } from './FinanceDialogs';
+import { DepreciationPolicyDialog, FinanceAssetDrawer, FinanceNotice, NewExpenseDialog, RecordPaymentDialog, OperatingExpenseDrawer } from './FinanceDialogs';
 import './finance.css';
 
 function StatusTag({status}: {status: PaymentStatus}) {
@@ -42,8 +42,9 @@ export default function FinancePage() {
   const [branch,setBranch] = useState('All branches');
   const [status,setStatus] = useState('All payment statuses');
   const [activeAsset,setActiveAsset] = useState<FinancialAsset|null>(null);
-  const [assetView,setAssetView] = useState<'details'|'payment'>('details');
-  const [showPaymentPicker,setShowPaymentPicker] = useState(false);
+  const [paymentOpen,setPaymentOpen] = useState(false);
+  const [paymentInitial,setPaymentInitial] = useState<FinancialAsset|null>(null);
+  const [returnToAsset,setReturnToAsset] = useState(false);
   const [activeExpense,setActiveExpense] = useState<OperatingExpense|null>(null);
   const [showAdd,setShowAdd] = useState(false);
   const [showPolicy,setShowPolicy] = useState(false);
@@ -57,7 +58,18 @@ export default function FinancePage() {
   }),[search,branch,status]);
   const clear = () => {setSearch('');setBranch('All branches');setStatus('All payment statuses');};
   const switchTab = (next: FinanceTab) => {setTab(next);clear();};
-  const openAsset = (item: FinancialAsset) => {setAssetView('details');setActiveAsset(item);};
+  const openAsset = (item: FinancialAsset) => setActiveAsset(item);
+  const openPayment = (item: FinancialAsset|null = null) => {
+    setPaymentInitial(item);
+    setReturnToAsset(item !== null);
+    setActiveAsset(null);
+    setPaymentOpen(true);
+  };
+  const closePayment = () => {
+    setPaymentOpen(false);
+    if(returnToAsset && paymentInitial) setActiveAsset(paymentInitial);
+    setReturnToAsset(false);
+  };
   const exportPreview = () => setNotice('Exports are a design preview. Production Excel, CSV and PDF exports will require authorized financial data and server-side services.');
 
   return <div className="fn-page">
@@ -109,7 +121,7 @@ export default function FinancePage() {
 
       {tab === 'Invoices & payments' && <>
         <SectionHeading title="Invoices and payments" subtitle="Informational statuses only · no bank reconciliation"
-          actions={<Button variant="primary" icon={<Plus size={16}/>} onClick={()=>setShowPaymentPicker(true)}>Record payment</Button>}/>
+          actions={<Button variant="primary" icon={<Plus size={16}/>} onClick={()=>openPayment()}>Record payment</Button>}/>
         <div className="fn-table-scroll"><table className="fn-table fn-invoice-table"><thead><tr>
           <th>INVOICE</th><th>SUPPLIER / RESOURCE</th><th>TOTAL</th><th>PAID</th><th>REMAINING</th><th>STATUS</th><th aria-label="Actions"/>
         </tr></thead><tbody>{assets.map(item=><tr key={item.id} role="button" tabIndex={0}
@@ -178,8 +190,8 @@ export default function FinancePage() {
     </Card>
 
     <div className="fn-preview-caption"><Badge tone="blue">UI preview</Badge><span>All totals, transactions, exchange equivalents and depreciation values are sample information only.</span></div>
-    {activeAsset && <FinanceAssetDrawer key={activeAsset.id} record={activeAsset} initialView={assetView} close={()=>setActiveAsset(null)}/>}
-    {showPaymentPicker && <InvoicePaymentPicker close={()=>setShowPaymentPicker(false)} select={item=>{setShowPaymentPicker(false);setAssetView('payment');setActiveAsset(item);}}/>}
+    {activeAsset && <FinanceAssetDrawer key={activeAsset.id} record={activeAsset} close={()=>setActiveAsset(null)} onRecordPayment={openPayment}/>}
+    {paymentOpen && <RecordPaymentDialog initialRecord={paymentInitial} close={closePayment}/>}
     {activeExpense && <OperatingExpenseDrawer key={activeExpense.id} item={activeExpense} close={()=>setActiveExpense(null)}/>}
     {showAdd && <NewExpenseDialog close={()=>setShowAdd(false)}/>}
     {showPolicy && <DepreciationPolicyDialog close={()=>setShowPolicy(false)}/>}
