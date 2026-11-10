@@ -59,7 +59,8 @@ export function LicenseDialog({ license, initialView, close }: { license: Licens
   const [renewalDate, setRenewalDate] = useState(() => license.renewal ? new Date(license.renewal).toISOString().slice(0, 10) : '');
   const [reminders, setReminders] = useState<number[]>([30, 14, 7]);
   const [renewalOwner, setRenewalOwner] = useState(license.owner);
-  const [employee, setEmployee] = useState('Select employee...');
+  const recipientPlaceholder = license.model === 'Device-bound' ? 'Select device...' : 'Select employee...';
+  const [employee, setEmployee] = useState(recipientPlaceholder);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [releaseCandidate, setReleaseCandidate] = useState('');
@@ -77,7 +78,7 @@ export function LicenseDialog({ license, initialView, close }: { license: Licens
     setMessage('Renewal policy reviewed: ' + autoRenew.toLowerCase() + ', reminders at ' + (reminders.length ? reminders.sort((a,b) => b-a).join(', ') + ' days' : 'no offsets') + ', owned by ' + renewalOwner + '. This is a design preview; no reminders or records were changed.');
   };
   const showSeatPreview = () => {
-    if (employee === 'Select employee...') { setError(license.model === 'Device-bound' ? 'Select a device to preview an assignment.' : 'Select an employee to preview an assignment.'); return; }
+    if (employee === recipientPlaceholder) { setError(license.model === 'Device-bound' ? 'Select a device to preview an assignment.' : 'Select an employee to preview an assignment.'); return; }
     if (license.total <= license.assigned) { setError('There are no available seats to assign.'); return; }
     if (license.users.includes(employee)) { setError('This employee is already listed among the example assignments.'); return; }
     setError('');
@@ -152,7 +153,7 @@ export function LicenseDialog({ license, initialView, close }: { license: Licens
             {license.assigned > license.users.length && <p className="lic-muted-note">Only example assignment names are shown; the summary includes additional sample allocations.</p>}
           </section>
           <section className="lic-block"><Field label={license.model === 'Device-bound' ? 'Assign to device (preview)' : 'Assign to employee'}>
-            <Select label="Select recipient" value={employee} options={license.model === 'Device-bound' ? ['Select employee...', ...sampleDevices] : ['Select employee...', ...employees]} onChange={value => { setEmployee(value); setError(''); }}/></Field></section>
+            <Select label="Select recipient" value={employee} options={[recipientPlaceholder, ...(license.model === 'Device-bound' ? sampleDevices : employees)]} onChange={value => { setEmployee(value); setError(''); }}/></Field></section>
           <p className="lic-info-banner">Seat availability is automatically derived from assignments. Employee offboarding creates a review/release task; all changes are auditable.</p>
           {error && <p className="lic-validation" role="alert">{error}</p>}
         </div><footer className="lic-dialog-footer"><Button onClick={viewClose}>Back</Button><span className="lic-footer-space"/><Button variant="primary" onClick={showSeatPreview}>Preview assignment</Button></footer>
