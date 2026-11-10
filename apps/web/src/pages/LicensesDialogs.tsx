@@ -4,6 +4,7 @@ import { Badge, Button, Input, NumberInput, Select } from '../components/ui';
 import { currencyText, employees, initials, licenseBranches, type LicenseModel, type LicenseRecord, type LicenseStatus } from './licenses-data';
 
 type View = 'details' | 'renewal' | 'seats';
+const sampleDevices = ['Workstation WS-01', 'Workstation WS-02', 'Workstation WS-03', 'Office Laptop 01'];
 
 function useLicenseEscape(close: () => void) {
   useEffect(() => {
@@ -76,11 +77,11 @@ export function LicenseDialog({ license, initialView, close }: { license: Licens
     setMessage('Renewal policy reviewed: ' + autoRenew.toLowerCase() + ', reminders at ' + (reminders.length ? reminders.sort((a,b) => b-a).join(', ') + ' days' : 'no offsets') + ', owned by ' + renewalOwner + '. This is a design preview; no reminders or records were changed.');
   };
   const showSeatPreview = () => {
-    if (employee === 'Select employee...') { setError('Select an employee to preview an assignment.'); return; }
+    if (employee === 'Select employee...') { setError(license.model === 'Device-bound' ? 'Select a device to preview an assignment.' : 'Select an employee to preview an assignment.'); return; }
     if (license.total <= license.assigned) { setError('There are no available seats to assign.'); return; }
     if (license.users.includes(employee)) { setError('This employee is already listed among the example assignments.'); return; }
     setError('');
-    setMessage('Assignment preview: ' + employee + ' would receive a seat for ' + license.name + '. No assignments, seat totals or audit records were changed.');
+    setMessage('Assignment preview: ' + employee + ' would receive a ' + (license.model === 'Device-bound' ? 'device' : 'user') + ' seat for ' + license.name + '. No assignments, seat totals or audit records were changed.');
   };
 
   return <div className="lic-overlay" onMouseDown={close}>
@@ -127,7 +128,7 @@ export function LicenseDialog({ license, initialView, close }: { license: Licens
         <div className="lic-dialog-body">
           <div className="lic-form-grid">
             <Field label="Auto-renewal"><Select label="Auto-renewal" options={['Enabled', 'Disabled']} value={autoRenew} onChange={setAutoRenew}/></Field>
-            <Field label="Renewal date"><Input type="date" value={renewalDate} onChange={e => { setRenewalDate(e.target.value); setError(''); }}/></Field>
+            <Field label="Renewal date"><Input type="date" aria-label="Renewal date" value={renewalDate} onChange={e => { setRenewalDate(e.target.value); setError(''); }}/></Field>
           </div>
           <section className="lic-block"><h3>Reminder offsets</h3><div className="lic-reminder-list">
             {[30, 14, 7, 1].map(day => <label className={'lic-reminder ' + (reminders.includes(day) ? 'selected' : '')} key={day}>
@@ -151,7 +152,7 @@ export function LicenseDialog({ license, initialView, close }: { license: Licens
             {license.assigned > license.users.length && <p className="lic-muted-note">Only example assignment names are shown; the summary includes additional sample allocations.</p>}
           </section>
           <section className="lic-block"><Field label={license.model === 'Device-bound' ? 'Assign to device (preview)' : 'Assign to employee'}>
-            <Select label="Select recipient" value={employee} options={['Select employee...', ...employees]} onChange={value => { setEmployee(value); setError(''); }}/></Field></section>
+            <Select label="Select recipient" value={employee} options={license.model === 'Device-bound' ? ['Select employee...', ...sampleDevices] : ['Select employee...', ...employees]} onChange={value => { setEmployee(value); setError(''); }}/></Field></section>
           <p className="lic-info-banner">Seat availability is automatically derived from assignments. Employee offboarding creates a review/release task; all changes are auditable.</p>
           {error && <p className="lic-validation" role="alert">{error}</p>}
         </div><footer className="lic-dialog-footer"><Button onClick={viewClose}>Back</Button><span className="lic-footer-space"/><Button variant="primary" onClick={showSeatPreview}>Preview assignment</Button></footer>
@@ -225,15 +226,15 @@ export function AddLicenseDialog({ close }: { close: () => void }) {
           </div></section>
           <section className="lic-block"><h3>Product information</h3>
             <div className="lic-form-grid">
-              <Field label="Product / service name" required><Input value={product} onChange={e => { setProduct(e.target.value); setError(''); }} placeholder="e.g. Microsoft 365"/></Field>
-              <Field label="Vendor" required><Input value={vendor} onChange={e => { setVendor(e.target.value); setError(''); }} placeholder="e.g. Microsoft"/></Field>
-              <Field label="Total seats" required><NumberInput value={seats} min={1} step={1} inputMode="numeric" disabled={model === 'Individual'} onChange={e => { setSeats(e.target.value); setError(''); }}/></Field>
+              <Field label="Product / service name" required><Input value={product} aria-label="Product / service name" onChange={e => { setProduct(e.target.value); setError(''); }} placeholder="e.g. Microsoft 365"/></Field>
+              <Field label="Vendor" required><Input value={vendor} aria-label="Vendor" onChange={e => { setVendor(e.target.value); setError(''); }} placeholder="e.g. Microsoft"/></Field>
+              <Field label="Total seats" required><NumberInput aria-label="Total seats" value={seats} min={1} step={1} inputMode="numeric" disabled={model === 'Individual'} onChange={e => { setSeats(e.target.value); setError(''); }}/></Field>
               <Field label="License owner"><Select label="License owner" options={employees} value={owner} onChange={setOwner}/></Field>
               <Field label="Branch / department"><Select label="Branch / department" options={licenseBranches} value={branch} onChange={setBranch}/></Field>
               <Field label="Billing cycle"><Select label="Billing cycle" options={['Monthly', 'Quarterly', 'Yearly', 'Custom']} value={billing} onChange={setBilling}/></Field>
-              <Field label="Recurring cost" required><NumberInput value={cost} onChange={e => { setCost(e.target.value); setError(''); }} min={0} step="0.01" placeholder="e.g. 1200"/></Field>
+              <Field label="Recurring cost" required><NumberInput aria-label="Recurring cost" value={cost} onChange={e => { setCost(e.target.value); setError(''); }} min={0} step="0.01" placeholder="e.g. 1200"/></Field>
               <Field label="Currency"><Select label="Currency" options={['USD', 'EUR', 'GEL']} value={currency} onChange={setCurrency}/></Field>
-              <Field label="Renewal / expiry date" required><Input type="date" value={date} onChange={e => { setDate(e.target.value); setError(''); }}/></Field>
+              <Field label="Renewal / expiry date" required><Input type="date" aria-label="Renewal or expiry date" value={date} onChange={e => { setDate(e.target.value); setError(''); }}/></Field>
               <Field label="Auto-renewal"><Select label="Auto-renewal" options={['Enabled', 'Disabled']} value={autoRenew} onChange={setAutoRenew}/></Field>
             </div>
           </section>
