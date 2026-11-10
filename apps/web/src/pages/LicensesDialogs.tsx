@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ArrowRight, Check, FileText, UploadCloud, X } from 'lucide-react';
-import { Badge, Button, Input, NumberInput, Select } from '../components/ui';
+import { Badge, Button, Checkbox, Input, NumberInput, Select } from '../components/ui';
 import { currencyText, employees, initials, licenseBranches, type LicenseModel, type LicenseRecord, type LicenseStatus } from './licenses-data';
 
 type View = 'details' | 'renewal' | 'seats';
@@ -133,7 +133,7 @@ export function LicenseDialog({ license, initialView, close }: { license: Licens
           </div>
           <section className="lic-block"><h3>Reminder offsets</h3><div className="lic-reminder-list">
             {[30, 14, 7, 1].map(day => <label className={'lic-reminder ' + (reminders.includes(day) ? 'selected' : '')} key={day}>
-              <input type="checkbox" checked={reminders.includes(day)} onChange={e => setReminders(current => e.target.checked ? [...current, day] : current.filter(value => value !== day))}/>
+              <Checkbox checked={reminders.includes(day)} onChange={e => setReminders(current => e.target.checked ? [...current, day] : current.filter(value => value !== day))}/>
               <span><strong>{day} {day === 1 ? 'day' : 'days'} before expiry</strong><small>Email and in-app notification</small></span></label>)}
           </div></section>
           <section className="lic-block"><Field label="Renewal owner"><Select label="Renewal owner" options={employees} value={renewalOwner} onChange={setRenewalOwner}/></Field></section>
