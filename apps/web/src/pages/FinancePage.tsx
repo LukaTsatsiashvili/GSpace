@@ -6,7 +6,7 @@ import {
   monthlyCosts, paymentStatus, paymentStatuses, remaining, topCategories,
   type FinanceTab, type FinancialAsset, type OperatingExpense, type PaymentStatus
 } from './finance-data';
-import { DepreciationPolicyDialog, FinanceAssetDrawer, FinanceNotice, NewExpenseDialog, OperatingExpenseDrawer } from './FinanceDialogs';
+import { DepreciationPolicyDialog, FinanceAssetDrawer, FinanceNotice, InvoicePaymentPicker, NewExpenseDialog, OperatingExpenseDrawer } from './FinanceDialogs';
 import './finance.css';
 
 function StatusTag({status}: {status: PaymentStatus}) {
@@ -42,6 +42,8 @@ export default function FinancePage() {
   const [branch,setBranch] = useState('All branches');
   const [status,setStatus] = useState('All payment statuses');
   const [activeAsset,setActiveAsset] = useState<FinancialAsset|null>(null);
+  const [assetView,setAssetView] = useState<'details'|'payment'>('details');
+  const [showPaymentPicker,setShowPaymentPicker] = useState(false);
   const [activeExpense,setActiveExpense] = useState<OperatingExpense|null>(null);
   const [showAdd,setShowAdd] = useState(false);
   const [showPolicy,setShowPolicy] = useState(false);
@@ -55,6 +57,7 @@ export default function FinancePage() {
   }),[search,branch,status]);
   const clear = () => {setSearch('');setBranch('All branches');setStatus('All payment statuses');};
   const switchTab = (next: FinanceTab) => {setTab(next);clear();};
+  const openAsset = (item: FinancialAsset) => {setAssetView('details');setActiveAsset(item);};
   const exportPreview = () => setNotice('Exports are a design preview. Production Excel, CSV and PDF exports will require authorized financial data and server-side services.');
 
   return <div className="fn-page">
@@ -88,7 +91,7 @@ export default function FinancePage() {
         </div>
         <div className="fn-recent-box">
           <SectionHeading title="Recent financial records" actions={<Button onClick={()=>switchTab('Asset costs')}>View all costs</Button>}/>
-          <AssetTable items={assets.slice(0,4)} open={setActiveAsset}/>
+          <AssetTable items={assets.slice(0,4)} open={openAsset}/>
         </div>
       </>}
 
@@ -99,19 +102,19 @@ export default function FinancePage() {
           <Select className="fn-filter" label="Filter payment status" options={['All payment statuses',...paymentStatuses]} value={status} onChange={setStatus}/>
           <span className="fn-toolbar-spacer"/><Button onClick={clear}>Clear filters</Button>
         </div>
-        <AssetTable items={filtered} open={setActiveAsset}/>
+        <AssetTable items={filtered} open={openAsset}/>
         {!filtered.length && <div className="fn-empty">No matching financial records. Try another filter or search term.</div>}
         <div className="fn-table-footer">{filtered.length} illustrative record{filtered.length===1?'':'s'} · select a row for financial details</div>
       </>}
 
       {tab === 'Invoices & payments' && <>
         <SectionHeading title="Invoices and payments" subtitle="Informational statuses only · no bank reconciliation"
-          actions={<Button variant="primary" icon={<Plus size={16}/>} onClick={()=>setActiveAsset(assets[1])}>Record payment</Button>}/>
+          actions={<Button variant="primary" icon={<Plus size={16}/>} onClick={()=>setShowPaymentPicker(true)}>Record payment</Button>}/>
         <div className="fn-table-scroll"><table className="fn-table fn-invoice-table"><thead><tr>
           <th>INVOICE</th><th>SUPPLIER / RESOURCE</th><th>TOTAL</th><th>PAID</th><th>REMAINING</th><th>STATUS</th><th aria-label="Actions"/>
         </tr></thead><tbody>{assets.map(item=><tr key={item.id} role="button" tabIndex={0}
-          aria-label={'Open invoice '+item.invoice} onClick={()=>setActiveAsset(item)}
-          onKeyDown={e=>openByKey(e,()=>setActiveAsset(item))}>
+          aria-label={'Open invoice '+item.invoice} onClick={()=>openAsset(item)}
+          onKeyDown={e=>openByKey(e,()=>openAsset(item))}>
           <td><strong>{item.invoice}</strong><small>{item.purchaseDate}</small></td>
           <td><strong>{item.supplier}</strong><small>{item.name}</small></td>
           <td><strong>{money(item.value,item.currency)}</strong></td><td className="fn-muted">{money(item.paid,item.currency)}</td>
@@ -144,8 +147,8 @@ export default function FinancePage() {
         <div className="fn-table-scroll"><table className="fn-table fn-depreciation-table"><thead><tr>
           <th>ASSET</th><th>ACQUISITION COST</th><th>USEFUL LIFE</th><th>METHOD</th><th>ACCUMULATED DEPRECIATION</th><th>EST. BOOK VALUE</th><th aria-label="Actions"/>
         </tr></thead><tbody>{assets.filter(item=>item.usefulLife!==null).map(item=><tr key={item.id} role="button" tabIndex={0}
-          aria-label={'Open depreciation for '+item.name} onClick={()=>setActiveAsset(item)}
-          onKeyDown={e=>openByKey(e,()=>setActiveAsset(item))}>
+          aria-label={'Open depreciation for '+item.name} onClick={()=>openAsset(item)}
+          onKeyDown={e=>openByKey(e,()=>openAsset(item))}>
           <td><strong>{item.name}</strong><small>{item.resourceId}</small></td>
           <td><strong>{money(item.value,item.currency)}</strong></td>
           <td className="fn-muted">{item.usefulLife} months</td><td className="fn-muted">Straight-line</td>
@@ -175,7 +178,8 @@ export default function FinancePage() {
     </Card>
 
     <div className="fn-preview-caption"><Badge tone="blue">UI preview</Badge><span>All totals, transactions, exchange equivalents and depreciation values are sample information only.</span></div>
-    {activeAsset && <FinanceAssetDrawer key={activeAsset.id} record={activeAsset} close={()=>setActiveAsset(null)}/>}
+    {activeAsset && <FinanceAssetDrawer key={activeAsset.id} record={activeAsset} initialView={assetView} close={()=>setActiveAsset(null)}/>}
+    {showPaymentPicker && <InvoicePaymentPicker close={()=>setShowPaymentPicker(false)} select={item=>{setShowPaymentPicker(false);setAssetView('payment');setActiveAsset(item);}}/>}
     {activeExpense && <OperatingExpenseDrawer key={activeExpense.id} item={activeExpense} close={()=>setActiveExpense(null)}/>}
     {showAdd && <NewExpenseDialog close={()=>setShowAdd(false)}/>}
     {showPolicy && <DepreciationPolicyDialog close={()=>setShowPolicy(false)}/>}
