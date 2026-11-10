@@ -79,9 +79,6 @@
 .tr-resource-option{display:flex;align-items:center;gap:13px;min-height:51px;border:1px solid var(--border);border-radius:9px;padding:11px 13px;cursor:pointer;background:var(--surface)}
 .tr-resource-option:hover{border-color:color-mix(in srgb,var(--accent) 42%,var(--border));background:var(--surface2)}
 .tr-resource-option.selected{border-color:var(--accent);background:var(--accent-soft)}
-.tr-resource-option input{appearance:none;flex:none;width:14px;height:14px;border:1.5px solid var(--muted);background:var(--surface);border-radius:4px;margin:0;display:grid;place-items:center}
-.tr-resource-option input:checked{background:var(--accent);border-color:var(--accent)}
-.tr-resource-option input:checked::after{content:'';width:7px;height:4px;border-left:2px solid white;border-bottom:2px solid white;transform:rotate(-45deg) translateY(-1px)}
 .tr-resource-option>span{display:flex;flex:1;flex-direction:column;min-width:0;gap:5px}
 .tr-resource-option strong{font-size:11px}
 .tr-resource-option small{font-size:10px;color:var(--muted)}
