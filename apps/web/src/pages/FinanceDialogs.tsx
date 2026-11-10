@@ -62,15 +62,12 @@ function FilePicker({files,onAdd,onRemove}: {files:File[];onAdd:(items:FileList|
   </>;
 }
 
-type AssetView = 'details' | 'correct' | 'payment';
-export function FinanceAssetDrawer({record,close,initialView='details'}: {record:FinancialAsset;close:()=>void;initialView?:AssetView}) {
-  const [view,setView]=useState<AssetView>(initialView);
+type AssetView = 'details' | 'correct';
+export function FinanceAssetDrawer({record,close,onRecordPayment}: {record:FinancialAsset;close:()=>void;onRecordPayment:(record:FinancialAsset)=>void}) {
+  const [view,setView]=useState<AssetView>('details');
   const [notice,setNotice]=useState('');
   const [newValue,setNewValue]=useState(String(record.value));
   const [reason,setReason]=useState('');
-  const [paymentAmount,setPaymentAmount]=useState(remaining(record)>0?String(remaining(record)):'');
-  const [paymentDate,setPaymentDate]=useState('2026-11-10');
-  const [paymentRef,setPaymentRef]=useState('');
   const [error,setError]=useState('');
   const closeView=()=>{setError('');if(view==='details')close();else setView('details');};
   useFinanceEscape(()=>{if(notice)setNotice('');else closeView();});
@@ -81,19 +78,13 @@ export function FinanceAssetDrawer({record,close,initialView='details'}: {record
     if(!reason.trim()){setError('A written correction reason is required.');return;}
     setError('');setNotice('Correction preview: '+record.id+' purchase value would change from '+money(record.value,record.currency)+' to '+money(n,record.currency)+'. Reason: '+reason.trim()+'. Original values would be preserved in a production audit trail. No data has changed.');
   }
-  function previewPayment() {
-    const n=Number(paymentAmount),balance=remaining(record);
-    if(!paymentAmount.trim()||!Number.isFinite(n)||n<=0||n>balance){setError('Payment must be greater than zero and cannot exceed '+money(balance,record.currency)+'.');return;}
-    if(!paymentDate){setError('Select a payment date.');return;}
-    setError('');setNotice('Payment preview for '+record.invoice+': '+money(n,record.currency)+' on '+paymentDate+(paymentRef.trim()?' · Reference: '+paymentRef.trim():'')+'. No real payment, bank transaction or financial record was created.');
-  }
   const setSubView=(v:AssetView)=>{setView(v);setError('');};
 
   return <div className="fn-overlay" onMouseDown={close}>
     <aside className="fn-drawer fn-asset-drawer" role="dialog" aria-modal="true" aria-labelledby="fn-asset-title"
       onMouseDown={e=>e.stopPropagation()}>
-      <ModalHeader id="fn-asset-title" eyebrow={view==='details'?'FINANCIAL RECORD · '+record.id:view==='correct'?'FINANCIAL CORRECTION':'PAYMENT PREVIEW'}
-        title={view==='details'?record.name:view==='correct'?'Correct purchase cost':'Record payment'}
+      <ModalHeader id="fn-asset-title" eyebrow={view==='details'?'FINANCIAL RECORD · '+record.id:'FINANCIAL CORRECTION'}
+        title={view==='details'?record.name:'Correct purchase cost'}
         subtitle={view==='details'?'Acquisition, payments, documentation and estimated value.':record.id+' · '+record.name} close={close}/>
       <div className="fn-dialog-body">
         {view==='details' ? <>
@@ -130,31 +121,15 @@ export function FinanceAssetDrawer({record,close,initialView='details'}: {record
               placeholder="Explain why this value needs correction..." value={reason} onChange={e=>{setReason(e.target.value);setError('');}}/></Field></div>
           </div>
           <p className="fn-info-banner">Historical values and the reason for any correction must be recorded in an audit trail. This action is a preview only.</p>
-        </> : <>
-          <SummaryGrid items={[
-            {label:'Invoice',value:record.invoice},{label:'Outstanding balance',value:money(remaining(record),record.currency)}
-          ]}/>
-          {remaining(record)>0 ? <>
-            <div className="fn-form-grid fn-action-fields">
-              <Field name="Payment amount" required><NumberInput aria-label="Payment amount" min={0.01} step={0.01} max={remaining(record)}
-                value={paymentAmount} onChange={e=>{setPaymentAmount(e.target.value);setError('');}}/></Field>
-              <Field name="Payment date" required><Input aria-label="Payment date" type="date" value={paymentDate}
-                onChange={e=>{setPaymentDate(e.target.value);setError('');}}/></Field>
-              <div className="fn-full"><Field name="Payment reference"><Input aria-label="Payment reference" placeholder="Optional transaction or receipt reference"
-                value={paymentRef} onChange={e=>setPaymentRef(e.target.value)}/></Field></div>
-            </div>
-            <p className="fn-info-banner">Payment information is only recorded as a preview. No payment processor, banking service or ledger is connected.</p>
-          </> : <p className="fn-info-banner">This illustrative invoice is already fully paid. There is no outstanding amount to record.</p>}
         </>}
         {error && <p className="fn-error" role="alert">{error}</p>}
       </div>
       <footer className="fn-dialog-footer">
         {view==='details'?<><Button onClick={close}>Close</Button><span className="fn-footer-spacer"/>
           <Button onClick={()=>setSubView('correct')}>Correct cost</Button>
-          <Button variant="primary" onClick={()=>setSubView('payment')}>Record payment</Button></>
+          <Button variant="primary" onClick={()=>onRecordPayment(record)}>Record payment</Button></>
         : <><Button onClick={closeView}>Back</Button><span className="fn-footer-spacer"/>
-          <Button variant="primary" disabled={view==='payment'&&remaining(record)===0}
-            onClick={view==='correct'?previewCorrection:previewPayment}>{view==='correct'?'Preview correction':'Preview payment'}</Button></>}
+          <Button variant="primary" onClick={previewCorrection}>Preview correction</Button></>}
       </footer>
       {notice && <div className="fn-notice-overlay" onMouseDown={e=>{e.stopPropagation();setNotice('');}}>
         <NoticeContent title="Design preview" description={notice} close={()=>setNotice('')}/></div>}
@@ -180,32 +155,112 @@ export function OperatingExpenseDrawer({item,close}: {item:OperatingExpense;clos
   </aside></div>;
 }
 
-export function InvoicePaymentPicker({close,select}: {close:()=>void;select:(record:FinancialAsset)=>void}) {
-  const unpaid=assets.filter(item=>remaining(item)>0);
-  const label=(item:FinancialAsset)=>item.invoice+' · '+item.name+' · '+money(remaining(item),item.currency)+' due';
-  const [choice,setChoice]=useState('Select invoice...');
-  const [error,setError]=useState('');
-  useFinanceEscape(close);
-  const next=()=>{
-    const selected=unpaid.find(item=>label(item)===choice);
-    if(!selected){setError('Select an invoice with an outstanding balance.');return;}
-    select(selected);
+export function RecordPaymentDialog({close,initialRecord}: {close:()=>void;initialRecord?:FinancialAsset|null}) {
+  const firstPayable = assets.find(item=>remaining(item)>0) ?? assets[0];
+  const [invoiceId,setInvoiceId] = useState(initialRecord?.id ?? firstPayable.id);
+  const [amount,setAmount] = useState('');
+  const [currency,setCurrency] = useState<MoneyCurrency>(initialRecord?.currency ?? firstPayable.currency);
+  const [date,setDate] = useState('');
+  const [reference,setReference] = useState('');
+  const [source,setSource] = useState('Bank transfer');
+  const [review,setReview] = useState(false);
+  const [notice,setNotice] = useState(false);
+  const [error,setError] = useState('');
+  const scrollArea=useRef<HTMLDivElement>(null);
+  const selected=assets.find(item=>item.id===invoiceId) ?? firstPayable;
+  const invoiceLabel=(item:FinancialAsset)=>item.invoice+' · '+item.name;
+  const dismiss=()=>{
+    if(notice){setNotice(false);return;}
+    if(review){setReview(false);scrollArea.current?.scrollTo(0,0);return;}
+    close();
   };
-  return <div className="fn-overlay" onMouseDown={close}><aside className="fn-drawer fn-form-drawer" role="dialog" aria-modal="true"
-    aria-labelledby="fn-pick-invoice-title" onMouseDown={e=>e.stopPropagation()}>
-    <ModalHeader id="fn-pick-invoice-title" eyebrow="PAYMENT PREVIEW" title="Choose an invoice"
-      subtitle="Select an unpaid or partially paid purchase to record a sample payment." close={close}/>
-    <div className="fn-dialog-body">
-      <Field name="Invoice with outstanding balance" required>
-        <Select label="Invoice to pay" value={choice} options={['Select invoice...',...unpaid.map(label)]}
-          onChange={v=>{setChoice(v);setError('');}}/>
-      </Field>
-      <p className="fn-info-banner">Only invoices with outstanding balances are listed. No bank transfer or real payment will be performed.</p>
-      {error && <p className="fn-error" role="alert">{error}</p>}
-    </div>
-    <footer className="fn-dialog-footer"><Button onClick={close}>Close</Button><span className="fn-footer-spacer"/>
-      <Button variant="primary" onClick={next}>Continue to payment <ArrowRight size={15}/></Button></footer>
-  </aside></div>;
+  useFinanceEscape(dismiss);
+  const changeInvoice=(label:string)=>{
+    const next=assets.find(item=>invoiceLabel(item)===label);
+    if(!next)return;
+    setInvoiceId(next.id);
+    setCurrency(next.currency);
+    setAmount('');
+    setError('');
+  };
+  const toReview=()=>{
+    const balance=remaining(selected),payment=Number(amount);
+    if(balance<=0){setError('This invoice is already fully paid. Choose an invoice with an outstanding balance.');return;}
+    if(!amount.trim()||!Number.isFinite(payment)||payment<=0||Math.round(payment*100)!==payment*100){
+      setError('Enter a valid positive payment amount with at most two decimal places.');return;
+    }
+    if(currency!==selected.currency){
+      setError('For this preview, payment currency must match the invoice currency. FX conversion is not connected.');return;
+    }
+    if(payment>balance){setError('Payment amount cannot exceed the outstanding balance of '+money(balance,selected.currency)+'.');return;}
+    if(date.trim()&&Number.isNaN(Date.parse(date.trim()))){setError('Enter a valid payment date, e.g. Nov 06, 2026.');return;}
+    setError('');
+    setReview(true);
+    scrollArea.current?.scrollTo(0,0);
+  };
+  return <div className="fn-overlay" onMouseDown={close}>
+    <aside className="fn-drawer fn-form-drawer fn-payment-drawer" role="dialog" aria-modal="true"
+      aria-labelledby="fn-record-payment-title" onMouseDown={event=>event.stopPropagation()}>
+      <ModalHeader id="fn-record-payment-title" close={close}
+        eyebrow={review?'PAYMENT REVIEW':'PAYMENT RECORD'}
+        title={review?'Review payment':'Record invoice payment'}
+        subtitle={review?'Confirm this sample entry before proceeding.':'Update an informational payment status and retain proof.'}/>
+      <div className="fn-dialog-body" ref={scrollArea}>
+        {review ? <>
+          <SummaryGrid items={[
+            {label:'Invoice',value:invoiceLabel(selected)},
+            {label:'Amount',value:money(Number(amount),currency)},
+            {label:'Source',value:source}
+          ]}/>
+          <p className="fn-info-banner">Preview only. Nothing will be written to a production database or payment provider.</p>
+        </> : <>
+          <div className="fn-form-grid fn-payment-fields">
+            <Field name="Invoice / purchase">
+              <Select label="Invoice or purchase" value={invoiceLabel(selected)}
+                options={assets.map(invoiceLabel)} onChange={changeInvoice}/>
+            </Field>
+            <Field name="Payment amount" required>
+              <NumberInput aria-label="Payment amount" min={0.01} step={0.01} placeholder="0.00"
+                value={amount} onChange={event=>{setAmount(event.target.value);setError('');}}/>
+            </Field>
+            <Field name="Currency">
+              <Select label="Payment currency" value={currency} options={currencies}
+                onChange={value=>{setCurrency(value as MoneyCurrency);setError('');}}/>
+            </Field>
+            <Field name="Payment date">
+              <Input aria-label="Payment date" placeholder="e.g. Nov 06, 2026"
+                value={date} onChange={event=>{setDate(event.target.value);setError('');}}/>
+            </Field>
+            <Field name="Payment reference">
+              <Input aria-label="Payment reference" placeholder="Receipt or internal reference"
+                value={reference} onChange={event=>setReference(event.target.value)}/>
+            </Field>
+            <Field name="Payment source">
+              <Select label="Payment source" value={source}
+                options={['Bank transfer','Cash','Card','Other']} onChange={setSource}/>
+            </Field>
+          </div>
+          <p className="fn-info-banner">Payment records are informational: no funds are transferred and no bank account is connected.</p>
+          {error && <p className="fn-error" role="alert">{error}</p>}
+        </>}
+      </div>
+      <footer className="fn-dialog-footer">
+        {review?<Button onClick={()=>{setReview(false);scrollArea.current?.scrollTo(0,0);}}>Back to edit</Button>
+          :<Button onClick={close}>Close</Button>}
+        <span className="fn-footer-spacer"/>
+        <Button variant="primary" onClick={()=>review?setNotice(true):toReview()}>
+          {review?'Confirm preview':'Review payment'} {review?<Check size={15}/>:<ArrowRight size={15}/>}
+        </Button>
+      </footer>
+      {notice && <div className="fn-notice-overlay" onMouseDown={event=>{event.stopPropagation();setNotice(false);}}>
+        <NoticeContent title="Payment preview complete"
+          description={'Sample payment for '+invoiceLabel(selected)+' — '+money(Number(amount),currency)+' via '+source+
+            (date.trim()?' · '+date.trim():'')+(reference.trim()?' · Reference: '+reference.trim():'')+
+            '. No production payment, invoice balance, bank transaction or audit record was changed.'}
+          close={()=>setNotice(false)}/>
+      </div>}
+    </aside>
+  </div>;
 }
 
 export function DepreciationPolicyDialog({close}: {close:()=>void}) {
