@@ -75,7 +75,7 @@ export function LicenseDialog({ license, initialView, close }: { license: Licens
   const showPolicyPreview = () => {
     if (!renewalDate) { setError('Please specify a valid renewal date.'); return; }
     setError('');
-    setMessage('Renewal policy reviewed: ' + autoRenew.toLowerCase() + ', reminders at ' + (reminders.length ? reminders.sort((a,b) => b-a).join(', ') + ' days' : 'no offsets') + ', owned by ' + renewalOwner + '. This is a design preview; no reminders or records were changed.');
+    setMessage('Renewal policy reviewed: ' + autoRenew.toLowerCase() + ', reminders at ' + (reminders.length ? [...reminders].sort((a,b) => b-a).join(', ') + ' days' : 'no offsets') + ', owned by ' + renewalOwner + '. This is a design preview; no reminders or records were changed.');
   };
   const showSeatPreview = () => {
     if (employee === recipientPlaceholder) { setError(license.model === 'Device-bound' ? 'Select a device to preview an assignment.' : 'Select an employee to preview an assignment.'); return; }
