@@ -63,8 +63,8 @@ function FilePicker({files,onAdd,onRemove}: {files:File[];onAdd:(items:FileList|
 }
 
 type AssetView = 'details' | 'correct' | 'payment';
-export function FinanceAssetDrawer({record,close}: {record:FinancialAsset;close:()=>void}) {
-  const [view,setView]=useState<AssetView>('details');
+export function FinanceAssetDrawer({record,close,initialView='details'}: {record:FinancialAsset;close:()=>void;initialView?:AssetView}) {
+  const [view,setView]=useState<AssetView>(initialView);
   const [notice,setNotice]=useState('');
   const [newValue,setNewValue]=useState(String(record.value));
   const [reason,setReason]=useState('');
@@ -177,6 +177,34 @@ export function OperatingExpenseDrawer({item,close}: {item:OperatingExpense;clos
       <p className="fn-info-banner">Related {item.type.toLowerCase()} costs can be traced back to the resource or license history after production integration.</p>
     </div>
     <footer className="fn-dialog-footer fn-footer-right"><Button variant="primary" onClick={close}>Close</Button></footer>
+  </aside></div>;
+}
+
+export function InvoicePaymentPicker({close,select}: {close:()=>void;select:(record:FinancialAsset)=>void}) {
+  const unpaid=assets.filter(item=>remaining(item)>0);
+  const label=(item:FinancialAsset)=>item.invoice+' · '+item.name+' · '+money(remaining(item),item.currency)+' due';
+  const [choice,setChoice]=useState('Select invoice...');
+  const [error,setError]=useState('');
+  useFinanceEscape(close);
+  const next=()=>{
+    const selected=unpaid.find(item=>label(item)===choice);
+    if(!selected){setError('Select an invoice with an outstanding balance.');return;}
+    select(selected);
+  };
+  return <div className="fn-overlay" onMouseDown={close}><aside className="fn-drawer fn-form-drawer" role="dialog" aria-modal="true"
+    aria-labelledby="fn-pick-invoice-title" onMouseDown={e=>e.stopPropagation()}>
+    <ModalHeader id="fn-pick-invoice-title" eyebrow="PAYMENT PREVIEW" title="Choose an invoice"
+      subtitle="Select an unpaid or partially paid purchase to record a sample payment." close={close}/>
+    <div className="fn-dialog-body">
+      <Field name="Invoice with outstanding balance" required>
+        <Select label="Invoice to pay" value={choice} options={['Select invoice...',...unpaid.map(label)]}
+          onChange={v=>{setChoice(v);setError('');}}/>
+      </Field>
+      <p className="fn-info-banner">Only invoices with outstanding balances are listed. No bank transfer or real payment will be performed.</p>
+      {error && <p className="fn-error" role="alert">{error}</p>}
+    </div>
+    <footer className="fn-dialog-footer"><Button onClick={close}>Close</Button><span className="fn-footer-spacer"/>
+      <Button variant="primary" onClick={next}>Continue to payment <ArrowRight size={15}/></Button></footer>
   </aside></div>;
 }
 
