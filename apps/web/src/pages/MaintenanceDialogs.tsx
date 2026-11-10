@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { ArrowRight, Box, Check, ClipboardCheck, FileText, UploadCloud, X } from 'lucide-react';
+import { ArrowRight, Box, Check, ClipboardCheck, FileText, X } from 'lucide-react';
 import { Badge, Button, Input, NumberInput, Select, Textarea } from '../components/ui';
 import {
   currencies, formatCost, incidents, issueTypes, priorityOptions, repeatFrequencies, responsibleTeams,
@@ -329,7 +329,7 @@ function ResolutionForm({ incident, back, preview }: {
   const [outcome, setOutcome] = useState('Repaired / returned to service');
   const [condition, setCondition] = useState('Good');
   const [cost, setCost] = useState(incident.cost ? String(incident.cost) : '');
-  const [currency, setCurrency] = useState(incident.currency);
+  const [currency, setCurrency] = useState<string>(incident.currency);
   const [notes, setNotes] = useState('');
   const [files, setFiles] = useState<File[]>([]);
   const [error, setError] = useState('');
@@ -354,7 +354,7 @@ function ResolutionForm({ incident, back, preview }: {
           options={['Good','Needs attention','Damaged','Unusable']} onChange={setCondition}/></Field>
         <Field title="Final cost"><NumberInput aria-label="Final cost" min={0} step="0.01"
           value={cost} onChange={event => { setCost(event.target.value); setError(''); }}/></Field>
-        <Field title="Currency"><Select label="Currency" options={currencies} value={currency} onChange={setCurrency as (value: string) => void}/></Field>
+        <Field title="Currency"><Select label="Currency" options={currencies} value={currency} onChange={setCurrency}/></Field>
         <div className="mt-full"><Field title="Resolution notes / closure reason" required><Textarea aria-label="Resolution notes / closure reason" rows={4}
           placeholder="Explain the repair outcome, testing and closure decision..." value={notes}
           onChange={event => { setNotes(event.target.value); setError(''); }}/></Field></div>
