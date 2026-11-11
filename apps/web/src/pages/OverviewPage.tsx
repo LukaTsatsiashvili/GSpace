@@ -71,7 +71,7 @@ function PreviewDialog({ action, close }: { action: string; close: () => void })
   </div>;
 }
 
-export default function OverviewPage({ navigate }: { navigate: (id: string) => void }) {
+export default function OverviewPage({ navigate, firstName }: { navigate: (id: string) => void; firstName: string }) {
   const [range, setRange] = useState<Range>('Last 6 months');
   const [rangeOpen, setRangeOpen] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
@@ -84,7 +84,7 @@ export default function OverviewPage({ navigate }: { navigate: (id: string) => v
   const visibleAssets = assets.filter(asset => filter === 'All statuses' || asset.status === filter);
 
   return <div className="ov-page">
-    <div className="ov-welcome"><div><p className="ov-date">{dateLabel}</p><h1>{greeting}, Sandro <span aria-hidden="true">👋</span></h1><p className="ov-subtitle">Here's what's happening with your company resources today.</p></div><div className="ov-header-actions"><Button icon={<Download size={15}/>} onClick={() => setDialog('Export report')}>Export Report</Button><Button variant="primary" icon={<Plus size={16}/>} onClick={() => setDialog('Add resource')}>Add Resource</Button></div></div>
+    <div className="ov-welcome"><div><p className="ov-date">{dateLabel}</p><h1>{greeting}, {firstName} <span aria-hidden="true">👋</span></h1><p className="ov-subtitle">Here's what's happening with your company resources today.</p></div><div className="ov-header-actions"><Button icon={<Download size={15}/>} onClick={() => setDialog('Export report')}>Export Report</Button><Button variant="primary" icon={<Plus size={16}/>} onClick={() => setDialog('Add resource')}>Add Resource</Button></div></div>
     <div className="ov-kpi-grid">
       <Card className="ov-kpi"><div className="ov-kpi-top"><span>Total Assets</span><div className="ov-kpi-icon blue"><Box size={19}/></div></div><strong>1,248</strong><p><em className="up">↑ 8.2%</em> vs. last month</p></Card>
       <Card className="ov-kpi"><div className="ov-kpi-top"><span>Assigned Assets</span><div className="ov-kpi-icon mint"><UsersRound size={19}/></div></div><strong>892</strong><p><em className="up">71.5%</em> of total assets</p></Card>
