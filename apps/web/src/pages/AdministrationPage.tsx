@@ -3,11 +3,11 @@ import { ArrowLeftRight, Clock3, Plus, ShieldCheck, Box } from 'lucide-react';
 import { Badge, Button, Card, PageHeader, SearchInput, SectionTabs, Select } from '../components/ui';
 import {
   accountStatuses, branchNames, branches, departments,
-  initials, roleName, roles, tabs, userRecords, type AdminTab, type BranchRecord,
+  initials, permissionDefinitions, roleName, roles, tabs, userRecords, type AdminTab, type BranchRecord,
   type DepartmentRecord, type RoleRecord, type UserRecord
 } from './administration-data';
 import {
-  AdminNotice, BranchEditorDialog, DepartmentEditorDialog, ResetPasswordDialog,
+  BranchEditorDialog, DepartmentEditorDialog, ResetPasswordDialog,
   RoleEditorDialog, UserDetailsDrawer, UserEditorDialog
 } from './AdministrationDialogs';
 import './administration.css';
@@ -82,7 +82,6 @@ export default function AdministrationPage() {
   const [roleFormOpen,setRoleFormOpen]=useState(false);
   const [addBranchOpen,setAddBranchOpen]=useState(false);
   const [addDepartmentOpen,setAddDepartmentOpen]=useState(false);
-  const [notice,setNotice]=useState<{title:string;description:string}|null>(null);
 
   const visibleUsers=useMemo(()=>userRecords.filter(u=>{
     const query=userSearch.trim().toLowerCase();
@@ -93,7 +92,7 @@ export default function AdministrationPage() {
   }),[userSearch,userRole,userStatus,userBranch]);
   const visibleRoles=useMemo(()=>roles.filter(role=>{
     const q=roleSearch.trim().toLowerCase();
-    return !q||[role.name,role.code,role.description,...permissionDefinitionsForRole(role)].some(text=>text.toLowerCase().includes(q));
+    return !q||[role.name,role.code,role.description,...role.permissions.flatMap(id=>{const permission=permissionDefinitions.find(p=>p.id===id);return [id,permission?.name??'',permission?.description??''];})].some(text=>text.toLowerCase().includes(q));
   }),[roleSearch]);
   const openCreateUser=()=>{setEditingUser(null);setUserFormOpen(true);};
   const openEditUser=()=>{
@@ -188,9 +187,5 @@ export default function AdministrationPage() {
       close={()=>{setRoleFormOpen(false);setSelectedRole(null);}}/>}
     {addBranchOpen&&<BranchEditorDialog close={()=>setAddBranchOpen(false)}/>}
     {addDepartmentOpen&&<DepartmentEditorDialog close={()=>setAddDepartmentOpen(false)}/>}
-    {notice&&<AdminNotice title={notice.title} description={notice.description} close={()=>setNotice(null)}/>}
   </div>;
-}
-function permissionDefinitionsForRole(role:RoleRecord):string[] {
-  return role.permissions;
 }
