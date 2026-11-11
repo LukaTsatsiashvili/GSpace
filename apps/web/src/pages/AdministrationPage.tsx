@@ -2,7 +2,7 @@ import { useMemo, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { ArrowLeftRight, Clock3, Plus, ShieldCheck, Box } from 'lucide-react';
 import { Badge, Button, Card, PageHeader, SearchInput, SectionTabs, Select } from '../components/ui';
 import {
-  accountStatuses, branchNames, branches, departmentNames, departments,
+  accountStatuses, branchNames, branches, departments,
   initials, roleName, roles, tabs, userRecords, type AdminTab, type BranchRecord,
   type DepartmentRecord, type RoleRecord, type UserRecord
 } from './administration-data';
