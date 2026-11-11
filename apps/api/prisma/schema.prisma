@@ -73,6 +73,8 @@ model User {
   branch         Branch           @relation(fields: [branchId], references: [id], onDelete: Restrict)
   department     Department?      @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   credential     UserCredential?
+  invitations    AccountInvitation[]
+  phone          String?
   sessions       Session[]
   actorEvents    SecurityAuditEvent[] @relation("AuditActor")
   targetEvents   SecurityAuditEvent[] @relation("AuditTarget")
@@ -85,7 +87,22 @@ model UserCredential {
   passwordHash      String
   passwordChangedAt DateTime @default(now())
   mustChangePassword Boolean @default(false)
+  loginDisabled      Boolean @default(false)
   user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AccountInvitation {
+  id        String    @id @default(uuid())
+  tokenHash String    @unique
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind      String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, usedAt])
+  @@index([expiresAt])
 }
 
 model Session {
