@@ -1,8 +1,8 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { ArrowRight, Check, ShieldCheck, X } from 'lucide-react';
+import { ArrowRight, Check, X } from 'lucide-react';
 import { Badge, Button, Checkbox, Input, Select, Textarea } from '../components/ui';
 import {
-  accountStatuses, branchNames, departmentNames, initials, normalizeRoleCode,
+  accountStatuses, branchNames, departmentNames, normalizeRoleCode,
   permissionDefinitions, roleName, roles, userRecords,
   type AccountStatus, type BranchRecord, type DepartmentRecord, type PermissionId,
   type RoleRecord, type UserRecord
@@ -29,7 +29,7 @@ function Header({eyebrow,title,subtitle,close,id}:{eyebrow:string;title:string;s
   </header>;
 }
 function Field({label,required=false,children}:{label:string;required?:boolean;children:ReactNode}) {
-  return <label className="am-field"><span>{label}{required&&' *'}</span>{children}</label>;
+  return <div className="am-field"><span>{label}{required&&' *'}</span>{children}</div>;
 }
 function DisplayField({label,value}:{label:string;value:string}) {
   return <div className="am-display-field"><small>{label}</small><strong>{value}</strong></div>;
