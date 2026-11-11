@@ -13,6 +13,7 @@ import {
 import './administration.css';
 import AdministrationSettings from './AdministrationSettings';
 import AdministrationUsers, { type AdminSummary } from './AdministrationUsers';
+import AdministrationRoles from './AdministrationRoles';
 
 function clickOnKey(event:KeyboardEvent<HTMLTableRowElement>,open:()=>void) {
   if(event.key==='Enter'||event.key===' '){event.preventDefault();open();}
@@ -109,7 +110,7 @@ export default function AdministrationPage() {
   const changeTab=(next:AdminTab)=>setTab(next);
   const activity=()=>{window.location.hash='audit';};
   return <div className="am-page">
-    <PageHeader eyebrow="SYSTEM / ORGANIZATION CONTROL" title="Administration" badgeLabel="Users connected · other tabs preview"
+    <PageHeader eyebrow="SYSTEM / ORGANIZATION CONTROL" title="Administration" badgeLabel="Users & Roles connected · other tabs preview"
       description="Manage company users, access roles, branches and resource policies."
       actions={<><Button icon={<Clock3 size={16}/>} onClick={activity}>Admin activity</Button>
         <Button variant="primary" icon={<Plus size={16}/>} onClick={openCreateUser}>Add user</Button></>}/>
@@ -124,19 +125,7 @@ export default function AdministrationPage() {
       {tab==='Users'&&<AdministrationUsers openCreate={userFormOpen}
         closeCreate={()=>setUserFormOpen(false)} onSummary={setLiveSummary}/>}
       
-      {tab==='Roles & Permissions'&&<>
-        <div className="am-toolbar am-role-toolbar">
-          <SearchInput className="am-search" aria-label="Search roles or permissions" placeholder="Search roles or permissions..." value={roleSearch} onChange={e=>setRoleSearch(e.target.value)}/>
-          <span className="am-spacer"/>
-          <Button variant="primary" icon={<Plus size={16}/>} onClick={()=>{setSelectedRole(null);setRoleFormOpen(true);}}>Create role</Button>
-        </div>
-        <div className="am-role-grid">
-          {visibleRoles.map(role=><RoleCard key={role.code} role={role}
-            onOpen={()=>{setSelectedRole(role);setRoleFormOpen(true);}}/>)}
-        </div>
-        {!visibleRoles.length&&<div className="am-empty">No sample roles match your search.</div>}
-        <TableFooter>Role codes are unique and immutable. System Administrator remains protected.</TableFooter>
-      </>}
+      {tab==='Roles & Permissions'&&<AdministrationRoles/>}
 
       {tab==='Branches'&&<>
         <SectionHeading title="Branch directory" action={<Button variant="primary" icon={<Plus size={16}/>} onClick={()=>setAddBranchOpen(true)}>Add branch</Button>}/>
@@ -153,7 +142,7 @@ export default function AdministrationPage() {
       {tab==='Settings'&&<AdministrationSettings/>}
     </Card>
     <div className="am-preview-caption"><Badge tone="blue">UI preview</Badge>
-      <span>Users are backed by PostgreSQL. Roles, Branches, Departments and Settings tabs remain UI previews until their backend workflows are implemented.</span>
+      <span>Users and Roles are backed by PostgreSQL. Branches, Departments and Settings remain UI previews.</span>
     </div>
     {roleFormOpen&&<RoleEditorDialog key={selectedRole?.code??'new-role'} role={selectedRole}
       close={()=>{setRoleFormOpen(false);setSelectedRole(null);}}/>}
