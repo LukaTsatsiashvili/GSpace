@@ -12,7 +12,7 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "admin:bootstrap": "tsx src/scripts/bootstrap-admin.ts",
-    "test": "node --import tsx --test src/security/password.test.ts"
+    "test": "node --import tsx --test src/security/password.test.ts src/routes/auth.integration.test.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.9.0",

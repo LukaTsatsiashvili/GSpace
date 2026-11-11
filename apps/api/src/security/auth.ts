@@ -6,7 +6,7 @@ import type { PermissionKey } from './access-policy.js';
 const isProduction = process.env.NODE_ENV === 'production';
 const origin = new URL(process.env.WEB_ORIGIN || 'http://localhost:5173').origin;
 const secret = process.env.AUTH_SECRET;
-if (!secret || Buffer.byteLength(secret, 'utf8') < 32) {
+if (!secret || secret.startsWith('REPLACE_WITH_') || Buffer.byteLength(secret, 'utf8') < 32) {
   throw new Error('AUTH_SECRET must be set to at least 32 random bytes (do not commit it).');
 }
 if (isProduction && !origin.startsWith('https://')) {

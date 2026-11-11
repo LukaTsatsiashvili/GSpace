@@ -31,3 +31,7 @@ compose.yml     Local PostgreSQL
 ```
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for boundaries, principles, and implementation order.
+
+## Backend / Authentication foundation
+
+See [docs/AUTH_FOUNDATION.md](docs/AUTH_FOUNDATION.md) for secure local initialization, PostgreSQL baseline migrations, first-administrator bootstrap, API endpoints, limitations and tests. The UI remains a prototype until each business module is implemented.
