@@ -1,4 +1,5 @@
-.auth-shell{min-height:100dvh;display:grid;place-items:center;padding:20px}
+/* The app shell defaults to display:flex; keep the sign-in screen independently centered. */
+.app.auth-shell{display:grid;place-items:center;width:100%;min-height:100dvh;padding:20px}
 .auth-card{width:min(445px,100%);background:var(--surface);border:1px solid var(--border);border-radius:18px;padding:34px;box-shadow:0 20px 60px #0003}
 .auth-brand{display:flex;align-items:center;gap:12px;margin-bottom:33px}
 .auth-brand .brand-mark{width:40px;height:40px}
@@ -21,4 +22,4 @@
 .auth-loading p{font-size:13px}
 .auth-service-warning{position:fixed;top:8px;left:50%;transform:translateX(-50%);z-index:50;padding:8px 15px;border:1px solid #ad5858;background:#482a32;color:#ffe2e2;border-radius:9px;font-size:12px}
 .auth-error-banner{padding:10px 34px;color:var(--danger);background:var(--surface2);font-size:12px}
-@media(max-width:500px){.auth-card{padding:24px}.auth-shell{padding:12px}}
+@media(max-width:500px){.auth-card{padding:24px}.app.auth-shell{padding:12px}}
