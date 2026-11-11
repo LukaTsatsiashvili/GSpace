@@ -112,7 +112,54 @@ function Login({ onLogin }: { onLogin: (user: AuthUser) => void }) {
   </div>;
 }
 
+function ActivateAccount({ token, done }: { token: string; done: () => void }) {
+  const [password, setPassword] = useState('');
+  const [repeat, setRepeat] = useState('');
+  const [pending, setPending] = useState(false);
+  const [complete, setComplete] = useState(false);
+  const [error, setError] = useState('');
+
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (password.length < 15) { setError('Use a password with at least 15 characters.'); return; }
+    if (password !== repeat) { setError('Passwords do not match.'); return; }
+    setPending(true); setError('');
+    try {
+      const response = await postJson('/api/v1/auth/activate', { token, password });
+      if (!response.ok) throw new Error(await parseError(response));
+      setPassword(''); setRepeat('');
+      setComplete(true);
+    } catch (err) { setError(err instanceof Error ? err.message : 'Unable to activate account.'); }
+    finally { setPending(false); }
+  }
+
+  return <div className="app dark auth-shell"><main className="auth-card">
+    <div className="auth-brand"><span className="brand-mark"><Boxes size={22}/></span>
+      <div><strong>GSpace</strong><small>ENTERPRISE HUB</small></div></div>
+    <div className="auth-symbol"><ShieldCheck size={26}/></div>
+    <h1>{complete ? 'Account ready' : 'Set your account password'}</h1>
+    <p className="auth-lead">{complete ? 'Your password was saved. Sign in with your work email.' :
+      'This one-time invitation is valid for 60 minutes. Choose a strong, unique password.'}</p>
+    {complete ? <Button variant="primary" onClick={done}>Go to sign in</Button> :
+      <form onSubmit={submit} className="auth-form">
+        <label htmlFor="new-account-password">New password</label>
+        <Input id="new-account-password" type="password" autoComplete="new-password"
+          minLength={15} maxLength={1024} required value={password} onChange={e=>setPassword(e.target.value)}/>
+        <label htmlFor="confirm-account-password">Confirm new password</label>
+        <Input id="confirm-account-password" type="password" autoComplete="new-password"
+          minLength={15} required value={repeat} onChange={e=>setRepeat(e.target.value)}/>
+        {error && <p className="auth-message" role="alert">{error}</p>}
+        <Button type="submit" variant="primary" disabled={pending}>
+          {pending ? 'Saving...' : 'Activate account'}
+        </Button>
+      </form>}
+  </main></div>;
+}
+
 export default function AuthGate({ children }: { children: ReactNode }) {
+  const [activationToken, setActivationToken] = useState<string | null>(() => new URLSearchParams(window.location.hash.slice(1)).get('activate'));
+  useEffect(() => { const check = () => setActivationToken(new URLSearchParams(window.location.hash.slice(1)).get('activate'));
+    window.addEventListener('hashchange', check); return () => window.removeEventListener('hashchange', check); }, []);
   const [user, setUser] = useState<AuthUser | null | undefined>(undefined);
   const [loadingError, setLoadingError] = useState('');
   useEffect(() => {
@@ -140,6 +187,11 @@ export default function AuthGate({ children }: { children: ReactNode }) {
     setUser(null);
   }
 
+  if (activationToken) return <ActivateAccount token={activationToken} done={() => {
+    window.history.replaceState(null, '', location.pathname + location.search);
+    setActivationToken(null);
+    setUser(null);
+  }}/>;
   if (user === undefined) return <div className="app dark auth-loading"><ShieldCheck size={25}/><p>Checking your session...</p></div>;
   if (user === null) return <>
     {loadingError && <div className="auth-service-warning" role="alert">{loadingError}</div>}

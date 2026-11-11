@@ -12,6 +12,7 @@ import {
 } from './AdministrationDialogs';
 import './administration.css';
 import AdministrationSettings from './AdministrationSettings';
+import AdministrationUsers, { type AdminSummary } from './AdministrationUsers';
 
 function clickOnKey(event:KeyboardEvent<HTMLTableRowElement>,open:()=>void) {
   if(event.key==='Enter'||event.key===' '){event.preventDefault();open();}
@@ -70,6 +71,7 @@ function RoleCard({role,onOpen}:{role:RoleRecord;onOpen:()=>void}) {
 
 export default function AdministrationPage() {
   const [tab,setTab]=useState<AdminTab>('Users');
+  const [liveSummary,setLiveSummary]=useState<AdminSummary|null>(null);
   const [userSearch,setUserSearch]=useState('');
   const [userRole,setUserRole]=useState('All roles');
   const [userStatus,setUserStatus]=useState('All statuses');
@@ -95,7 +97,7 @@ export default function AdministrationPage() {
     const q=roleSearch.trim().toLowerCase();
     return !q||[role.name,role.code,role.description,...role.permissions.flatMap(id=>{const permission=permissionDefinitions.find(p=>p.id===id);return [id,permission?.name??'',permission?.description??''];})].some(text=>text.toLowerCase().includes(q));
   }),[roleSearch]);
-  const openCreateUser=()=>{setEditingUser(null);setUserFormOpen(true);};
+  const openCreateUser=()=>{setTab('Users');setEditingUser(null);setUserFormOpen(true);};
   const openEditUser=()=>{
     if(!selectedUser)return;
     setEditingUser(selectedUser);setSelectedUser(null);setUserFormOpen(true);
@@ -107,43 +109,21 @@ export default function AdministrationPage() {
   const changeTab=(next:AdminTab)=>setTab(next);
   const activity=()=>{window.location.hash='audit';};
   return <div className="am-page">
-    <PageHeader eyebrow="SYSTEM / ORGANIZATION CONTROL" title="Administration" badgeLabel="UI concept · sample data"
+    <PageHeader eyebrow="SYSTEM / ORGANIZATION CONTROL" title="Administration" badgeLabel="Users connected · other tabs preview"
       description="Manage company users, access roles, branches and resource policies."
       actions={<><Button icon={<Clock3 size={16}/>} onClick={activity}>Admin activity</Button>
         <Button variant="primary" icon={<Plus size={16}/>} onClick={openCreateUser}>Add user</Button></>}/>
     <div className="am-kpis">
-      <Card className="am-kpi"><span>Total users</span><strong>25</strong><small>Across all branches</small></Card>
-      <Card className="am-kpi"><span>Active accounts</span><strong>23</strong><small>2 inactive accounts</small></Card>
-      <Card className="am-kpi"><span>Active roles</span><strong>6</strong><small>One role per employee</small></Card>
-      <Card className="am-kpi"><span>Organization branches</span><strong>4</strong><small>One branch per employee</small></Card>
+      <Card className="am-kpi"><span>Total users</span><strong>{liveSummary?.total ?? '—'}</strong><small>Authorized accounts</small></Card>
+      <Card className="am-kpi"><span>Active accounts</span><strong>{liveSummary?.active ?? '—'}</strong><small>{liveSummary?.inactive ?? '—'} inactive accounts</small></Card>
+      <Card className="am-kpi"><span>Active roles</span><strong>{liveSummary?.roles ?? '—'}</strong><small>One role per employee</small></Card>
+      <Card className="am-kpi"><span>Organization branches</span><strong>{liveSummary?.branches ?? '—'}</strong><small>One branch per employee</small></Card>
     </div>
     <Card className="am-catalog">
       <SectionTabs tabs={tabs} selected={tab} onChange={value=>changeTab(value as AdminTab)}/>
-      {tab==='Users'&&<>
-        <div className="am-toolbar">
-          <SearchInput className="am-search" aria-label="Search users" placeholder="Search users, emails or branches..." value={userSearch} onChange={e=>setUserSearch(e.target.value)}/>
-          <Select className="am-filter" label="Filter role" options={['All roles',...roles.map(r=>r.name)]} value={userRole} onChange={setUserRole}/>
-          <Select className="am-filter" label="Filter user status" options={['All statuses',...accountStatuses]} value={userStatus} onChange={setUserStatus}/>
-          <Select className="am-filter" label="Filter branch" options={['All branches',...branchNames]} value={userBranch} onChange={setUserBranch}/>
-          <span className="am-spacer"/>
-          <Button variant="primary" icon={<Plus size={16}/>} onClick={openCreateUser}>Add user</Button>
-        </div>
-        <div className="am-table-scroll"><table className="am-table am-users-table">
-          <thead><tr><th>EMPLOYEE</th><th>ROLE</th><th>BRANCH / DEPARTMENT</th><th>STATUS</th><th>LAST ACTIVE</th><th aria-label="Actions"/></tr></thead>
-          <tbody>{visibleUsers.map(user=><tr key={user.id} role="button" tabIndex={0}
-            aria-label={'Open account of '+user.name}
-            onClick={()=>setSelectedUser(user)}
-            onKeyDown={e=>clickOnKey(e,()=>setSelectedUser(user))}>
-            <td><Person user={user}/></td><td><strong>{roleName(user.role)}</strong></td>
-            <td><strong>{user.branch}</strong><small>{user.department}</small></td>
-            <td><StateBadge value={user.status}/></td><td className="am-muted">{user.lastActive}</td>
-            <td className="am-action"><ArrowLeftRight size={17}/></td>
-          </tr>)}</tbody>
-        </table></div>
-        {!visibleUsers.length&&<div className="am-empty">No users match these filters. Try a different search or selection.</div>}
-        <TableFooter>{visibleUsers.length} illustrated accounts displayed · full directory and access checks will come from the backend.</TableFooter>
-      </>}
-
+      {tab==='Users'&&<AdministrationUsers openCreate={userFormOpen}
+        closeCreate={()=>setUserFormOpen(false)} onSummary={setLiveSummary}/>}
+      
       {tab==='Roles & Permissions'&&<>
         <div className="am-toolbar am-role-toolbar">
           <SearchInput className="am-search" aria-label="Search roles or permissions" placeholder="Search roles or permissions..." value={roleSearch} onChange={e=>setRoleSearch(e.target.value)}/>
@@ -173,12 +153,8 @@ export default function AdministrationPage() {
       {tab==='Settings'&&<AdministrationSettings/>}
     </Card>
     <div className="am-preview-caption"><Badge tone="blue">UI preview</Badge>
-      <span>Administrative records and actions are illustrative; no accounts, roles, branches or departments are changed.</span>
+      <span>Users are backed by PostgreSQL. Roles, Branches, Departments and Settings tabs remain UI previews until their backend workflows are implemented.</span>
     </div>
-    {selectedUser&&<UserDetailsDrawer user={selectedUser} close={()=>setSelectedUser(null)} onEdit={openEditUser} onReset={openResetUser}/>}
-    {userFormOpen&&<UserEditorDialog key={editingUser?.id??'new-user'} user={editingUser} close={()=>{setUserFormOpen(false);setEditingUser(null);}}/>}
-    {resetUser&&<ResetPasswordDialog user={resetUser} close={()=>setResetUser(null)}
-      back={()=>{setSelectedUser(resetUser);setResetUser(null);}}/>}
     {roleFormOpen&&<RoleEditorDialog key={selectedRole?.code??'new-role'} role={selectedRole}
       close={()=>{setRoleFormOpen(false);setSelectedRole(null);}}/>}
     {addBranchOpen&&<BranchEditorDialog close={()=>setAddBranchOpen(false)}/>}
