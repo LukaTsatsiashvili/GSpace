@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import { Plus, ShieldCheck, X } from 'lucide-react';
 import { Button, Checkbox, Input, SearchInput, Textarea } from '../components/ui';
 import { useAuth } from '../auth/AuthGate';
+import AdministrationFeedback from './AdministrationFeedback';
 
 type RoleRecord = { id: string; code: string; name: string; description: string; active: boolean; protected: boolean; userCount: number; permissions: string[] };
 type PermissionRecord = { id: string; name: string; description: string };
@@ -132,6 +133,7 @@ export default function AdministrationRoles() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const dismissNotice = useCallback(() => setNotice(''), []);
   const [query, setQuery] = useState('');
   const [editor, setEditor] = useState<RoleRecord | null | undefined>(undefined);
   const load = useCallback(async () => {
@@ -158,7 +160,7 @@ export default function AdministrationRoles() {
       {canManage && <Button variant="primary" icon={<Plus size={16}/>} onClick={()=>setEditor(null)}>Create role</Button>}
     </div>
     {error && <div className="am-empty" role="alert">{error} <Button onClick={()=>void load()}>Retry</Button></div>}
-    {notice && <div className="am-info" role="status">{notice} <Button onClick={()=>setNotice('')}>Dismiss</Button></div>}
+    {notice && <AdministrationFeedback message={notice} onDismiss={dismissNotice}/>}
     {loading ? <div className="am-empty">Loading roles from PostgreSQL...</div> :
       <div className="am-role-grid">
         {visible.map(role=><div className="am-role-card" key={role.id}>
