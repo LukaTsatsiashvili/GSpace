@@ -7,6 +7,7 @@ import {
   publicPrincipal, randomSessionToken, requireAuth, setSessionCookie, privateSubjectKey
 } from '../security/auth.js';
 import { loginBlocked, loginKey, recordFailedLogin, resetLoginThrottle } from '../security/login-throttle.js';
+import { inviteTokenHash } from '../security/invitations.js';
 
 const loginSchema = z.object({
   email: z.string().trim().email().max(254),
@@ -22,6 +23,61 @@ const asyncRoute = (fn: (req: Request, res: Response) => Promise<void>) =>
   (req: Request, res: Response, next: NextFunction) => { void fn(req, res).catch(next); };
 
 router.get('/csrf', issueCsrfToken);
+
+const activateSchema = z.object({
+  token: z.string().min(32).max(256),
+  password: z.string().min(15).max(1024)
+}).strict();
+
+router.post('/activate', asyncRoute(async (req, res) => {
+  const input = activateSchema.safeParse(req.body);
+  if (!input.success) {
+    res.status(400).json({ error: { code: 'INVALID_ACTIVATION', message: 'Invalid activation link or password policy' } });
+    return;
+  }
+  const now = new Date();
+  const invitation = await db.accountInvitation.findUnique({
+    where: { tokenHash: inviteTokenHash(input.data.token) },
+    include: { user: { include: { role: true, branch: true } } }
+  });
+  if (!invitation || invitation.usedAt || invitation.expiresAt <= now ||
+      !invitation.user.active || !invitation.user.role.active || !invitation.user.branch.active) {
+    res.status(400).json({ error: { code: 'INVALID_ACTIVATION', message: 'This activation link is expired or unavailable' } });
+    return;
+  }
+  const passwordHash = await hashPassword(input.data.password);
+  try {
+    await db.$transaction(async tx => {
+      const claim = await tx.accountInvitation.updateMany({
+        where: { id: invitation.id, usedAt: null, expiresAt: { gt: new Date() } },
+        data: { usedAt: new Date() }
+      });
+      if (claim.count !== 1) throw new Error('TOKEN_USED');
+      await tx.userCredential.upsert({
+        where: { userId: invitation.userId },
+        create: { userId: invitation.userId, passwordHash, loginDisabled: false, mustChangePassword: false },
+        update: { passwordHash, loginDisabled: false, mustChangePassword: false, passwordChangedAt: new Date() }
+      });
+      await tx.accountInvitation.updateMany({
+        where: { userId: invitation.userId, usedAt: null }, data: { usedAt: new Date() }
+      });
+      await tx.session.updateMany({ where: { userId: invitation.userId, revokedAt: null }, data: { revokedAt: new Date() } });
+      await tx.securityAuditEvent.create({
+        data: {
+          action: invitation.kind === 'RESET' ? 'AUTH_PASSWORD_RESET_COMPLETED' : 'AUTH_ACCOUNT_ACTIVATED',
+          actorUserId: invitation.userId, targetUserId: invitation.userId, success: true
+        }
+      });
+    });
+  } catch (err) {
+    if (err instanceof Error && err.message === 'TOKEN_USED') {
+      res.status(409).json({ error: { code: 'TOKEN_USED', message: 'This link has already been used' } }); return;
+    }
+    throw err;
+  }
+  res.status(204).send();
+}));
+
 
 router.post('/login', asyncRoute(async (req, res) => {
   const input = loginSchema.safeParse(req.body);
@@ -45,7 +101,7 @@ router.post('/login', asyncRoute(async (req, res) => {
   const valid = user?.credential
     ? await verifyPassword(input.data.password, user.credential.passwordHash)
     : (await burnPasswordCheck(input.data.password), false);
-  const eligible = !!user && !!valid && user.active && user.branch.active && user.role.active;
+  const eligible = !!user && !!valid && !user.credential?.loginDisabled && user.active && user.branch.active && user.role.active;
   if (!eligible) {
     await recordFailedLogin(throttleKey);
     await db.securityAuditEvent.create({ data: {
