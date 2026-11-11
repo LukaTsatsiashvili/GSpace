@@ -47,10 +47,10 @@ function Dialog({ title, description, close, children, footer }: {
   </div>;
 }
 
-function Editor({ role, permissions, onClose, onSaved }: {
-  role: RoleRecord | null; permissions: PermissionRecord[]; onClose: () => void; onSaved: () => void
+function Editor({ role, permissions, canManage, onClose, onSaved }: {
+  role: RoleRecord | null; permissions: PermissionRecord[]; canManage: boolean; onClose: () => void; onSaved: () => void
 }) {
-  const readOnly = role?.protected || role?.code === 'SYSTEM_ADMIN' || !role?.active;
+  const readOnly = !canManage || !!role?.protected || role?.code === 'SYSTEM_ADMIN' || (role !== null && !role.active);
   const [name, setName] = useState(role?.name ?? '');
   const [code, setCode] = useState(role?.code ?? '');
   const [description, setDescription] = useState(role?.description ?? '');
@@ -118,7 +118,7 @@ function Editor({ role, permissions, onClose, onSaved }: {
           <span><strong>{p.name}</strong><small>{p.description}</small></span>
         </label>
       )}</div>
-      {readOnly && <p className="am-info">This system role is protected and cannot be changed.</p>}
+      {readOnly && <p className="am-info">This role is read-only for your account or protected by the system.</p>}
     </>}
     {error && <p className="am-error" role="alert">{error}</p>}
   </Dialog>;
@@ -176,7 +176,7 @@ export default function AdministrationRoles() {
       </div>}
     {!loading && !visible.length && <div className="am-empty">No roles match your search.</div>}
     <div className="am-table-footer">Role codes are immutable. Protected roles cannot be edited. Changes to permissions immediately revoke affected sessions.</div>
-    {editor !== undefined && <Editor role={editor} permissions={permissions}
+    {editor !== undefined && <Editor role={editor} permissions={permissions} canManage={canManage}
       onClose={()=>setEditor(undefined)} onSaved={()=>{setEditor(undefined);setNotice('Role saved successfully.');void load();}}/>}
   </>;
 }
