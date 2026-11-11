@@ -63,10 +63,6 @@
 .am-role-bottom{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:auto}
 .am-role-bottom>span{color:var(--muted);font-size:10px;line-height:1.5}
 .am-role-bottom .ui-button{flex:none}
-.am-settings-placeholder{min-height:275px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;padding:42px 24px;text-align:center}
-.am-settings-placeholder .am-settings-icon{display:grid;place-items:center;border-radius:12px;background:var(--accent-soft);color:var(--accent);width:47px;height:47px}
-.am-settings-placeholder h2{font-size:17px;margin:4px 0 0}
-.am-settings-placeholder p{max-width:560px;color:var(--muted);font-size:12px;line-height:1.75;margin:0}
 .am-preview-caption{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:11px;color:var(--muted);margin-top:16px}
 /* Dialog structure: scrolling body, fixed header and footer, theme-aware. */
 .am-overlay{position:fixed;inset:0;z-index:51;display:flex;justify-content:flex-end;background:#07111fcf}
