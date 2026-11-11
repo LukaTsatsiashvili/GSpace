@@ -1,0 +1,108 @@
+/* Administration Settings — visual parity with the approved GSpace settings panel. */
+.am-settings-list{
+  display:grid;
+  gap:12px;
+  padding:19px 19px 20px;
+}
+.am-settings-row{
+  display:flex;
+  align-items:center;
+  gap:14px;
+  min-height:77px;
+  padding:16px 17px;
+  border:1px solid var(--border);
+  background:var(--surface);
+  border-radius:11px;
+}
+.am-settings-row-icon{
+  flex:none;
+  display:grid;
+  place-items:center;
+  width:40px;
+  height:40px;
+  border-radius:10px;
+  background:var(--accent-soft);
+  color:var(--accent);
+}
+.am-settings-row-copy{
+  display:flex;
+  flex:1;
+  min-width:0;
+  flex-direction:column;
+  gap:7px;
+}
+.am-settings-row-copy strong{
+  color:var(--text);
+  font-size:12px;
+  font-weight:800;
+  line-height:1.45;
+}
+.am-settings-row-copy small{
+  color:var(--muted);
+  font-size:11px;
+  line-height:1.5;
+}
+.am-settings-row>.ui-button{
+  flex:none;
+  margin-left:auto;
+}
+.am-settings-modal .am-modal-body{
+  padding:24px 20px;
+}
+.am-settings-modal .am-field>label{
+  color:var(--text);
+  font-size:11px;
+  font-weight:800;
+  line-height:1.5;
+}
+.am-settings-modal .am-form-grid{
+  column-gap:14px;
+  row-gap:16px;
+}
+.am-settings-modal .am-field .ui-input{
+  width:100%;
+}
+.am-settings-modal .am-field .ui-input[readonly]{
+  cursor:default;
+}
+.am-settings-modal .am-info{
+  margin-top:20px;
+}
+.am-settings-review{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:11px;
+}
+@media(max-width:650px){
+  .am-settings-list{
+    padding:12px;
+    gap:10px;
+  }
+  .am-settings-row{
+    gap:10px;
+    padding:13px;
+    min-height:76px;
+  }
+  .am-settings-modal .am-modal-body{
+    padding:18px 16px;
+  }
+}
+@media(max-width:440px){
+  .am-settings-row{
+    align-items:flex-start;
+    flex-wrap:wrap;
+  }
+  .am-settings-row-icon{
+    width:36px;
+    height:36px;
+  }
+  .am-settings-row-copy{
+    flex-basis:calc(100% - 48px);
+  }
+  .am-settings-row>.ui-button{
+    margin-left:46px;
+  }
+  .am-settings-review{
+    grid-template-columns:1fr;
+  }
+}
