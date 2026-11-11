@@ -1,6 +1,6 @@
 import { useMemo, useState, type KeyboardEvent, type ReactNode } from 'react';
-import { Activity, ArrowDownToLine, ArrowLeftRight, Box, Filter, RefreshCw } from 'lucide-react';
-import { Badge, Button, Card, PageHeader, SearchInput, SectionTabs, Select } from '../components/ui';
+import { ArrowDownToLine, ArrowLeftRight, Box, Filter, RefreshCw } from 'lucide-react';
+import { Badge, Button, Card, Input, PageHeader, SearchInput, SectionTabs, Select } from '../components/ui';
 import {
   auditModuleOptions, businessEvents, demoFilters, diagnosticEvents, displayTimestamp,
   healthChecks, healthServices, matchesRange, resultOptions, retentionMetrics,
@@ -139,9 +139,9 @@ export default function AuditPage() {
           <Button icon={<Filter size={15}/>} onClick={()=>setAdvancedOpen(true)}>More filters</Button>
         </Toolbar>
         {filters.range==='Custom range'&&<div className="ad-custom-range">
-          <label>From <input aria-label="Custom start date preview" type="date" value={filters.startDate}
+          <label>From <Input aria-label="Custom start date preview" type="date" value={filters.startDate}
             onChange={e=>change('startDate',e.target.value)}/></label>
-          <label>To <input aria-label="Custom end date preview" type="date" value={filters.endDate}
+          <label>To <Input aria-label="Custom end date preview" type="date" value={filters.endDate}
             onChange={e=>change('endDate',e.target.value)}/></label>
         </div>}
         {isAudit ? <AuditTable rows={auditRows} onOpen={setSelectedAudit}/>
