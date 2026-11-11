@@ -123,7 +123,7 @@ export default function ReportsPage() {
             <p>Assignments and movement events · sample period</p>
             <div className="rp-activity-chart" role="img" aria-label="Sample resource activity: June 68, July 91, August 84, September 116, October 103, November 127">
               {activityMonths.map(entry=><div className="rp-month" key={entry.label}>
-                <strong>{entry.value}</strong><span className="rp-activity-column" style={{height:((entry.value/140)*100)+'%'}}/>
+                <strong>{entry.value}</strong><span className="rp-activity-column" style={{height:Math.round(entry.value/140*135)+'px'}}/>
                 <small>{entry.label}</small>
               </div>)}
             </div>
