@@ -12,6 +12,7 @@ import LicensesPage from './pages/LicensesPage';
 import MaintenancePage from './pages/MaintenancePage';
 import FinancePage from './pages/FinancePage';
 import ReportsPage from './pages/ReportsPage';
+import AuditPage from './pages/AuditPage';
 
 type Theme = 'light' | 'dark';
 
@@ -73,7 +74,7 @@ export default function App() {
         <button className="icon-action" aria-label="Notifications (not yet connected)" disabled title="Notifications will be added with the backend workflows"><Bell size={19}/></button>
         <div className="profile"><div className="profile-avatar">SP</div><div className="profile-text"><strong>Sandro P.</strong><small>System Administrator · demo</small></div><ChevronDown size={14} className="profile-chevron"/></div>
       </div></header>
-      <main className="content">{current.id === 'overview' ? <OverviewPage navigate={navigate}/> : current.id === 'resources' ? <ResourcesPage/> : current.id === 'assignments' ? <AssignmentsPage/> : current.id === 'approvals' ? <ApprovalsPage/> : current.id === 'transfers' ? <TransfersPage/> : current.id === 'inventory' ? <InventoryPage/> : current.id === 'licenses' ? <LicensesPage/> : current.id === 'maintenance' ? <MaintenancePage/> : current.id === 'finance' ? <FinancePage/> : current.id === 'reports' ? <ReportsPage/> : <>
+      <main className="content">{current.id === 'overview' ? <OverviewPage navigate={navigate}/> : current.id === 'resources' ? <ResourcesPage/> : current.id === 'assignments' ? <AssignmentsPage/> : current.id === 'approvals' ? <ApprovalsPage/> : current.id === 'transfers' ? <TransfersPage/> : current.id === 'inventory' ? <InventoryPage/> : current.id === 'licenses' ? <LicensesPage/> : current.id === 'maintenance' ? <MaintenancePage/> : current.id === 'finance' ? <FinancePage/> : current.id === 'reports' ? <ReportsPage/> : current.id === 'audit' ? <AuditPage/> : <>
         <PageHeader eyebrow={`${current.group} / RESOURCE MANAGEMENT`} title={current.label} description={current.description}/>
         <ModulePage key={current.id} label={current.label}/>
         <div className="preview-notice"><Badge tone="blue">Development build</Badge><span>Visual shell and sample metrics only. All business operations require future authenticated API integration.</span></div>
