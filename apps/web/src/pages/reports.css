@@ -85,7 +85,6 @@
 .rp-checkbox-option:hover{background:var(--surface2)}
 .rp-checkbox-option.selected{background:var(--accent-soft);border-color:color-mix(in srgb,var(--accent) 40%,var(--border))}
 .rp-checkbox-option>span{font-size:11px;line-height:1.5}
-.rp-checkbox-option .ui-checkbox{width:17px;height:17px}
 .rp-info-banner{padding:15px;margin:20px 0 0;border-radius:9px;background:var(--accent-soft);color:var(--text);font-size:11px;line-height:1.7}
 .rp-error{margin:12px 0 0;color:var(--danger);font-size:11px;line-height:1.5}
 .rp-rule-section{margin-top:26px}
