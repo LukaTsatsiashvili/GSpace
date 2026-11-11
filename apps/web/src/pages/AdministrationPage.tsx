@@ -1,5 +1,5 @@
 import { useMemo, useState, type KeyboardEvent, type ReactNode } from 'react';
-import { ArrowLeftRight, Clock3, Plus, ShieldCheck, Box } from 'lucide-react';
+import { ArrowLeftRight, Clock3, Plus, ShieldCheck } from 'lucide-react';
 import { Badge, Button, Card, PageHeader, SearchInput, SectionTabs, Select } from '../components/ui';
 import {
   accountStatuses, branchNames, branches, departments,
@@ -11,6 +11,7 @@ import {
   RoleEditorDialog, UserDetailsDrawer, UserEditorDialog
 } from './AdministrationDialogs';
 import './administration.css';
+import AdministrationSettings from './AdministrationSettings';
 
 function clickOnKey(event:KeyboardEvent<HTMLTableRowElement>,open:()=>void) {
   if(event.key==='Enter'||event.key===' '){event.preventDefault();open();}
@@ -169,12 +170,7 @@ export default function AdministrationPage() {
         <TableFooter>Deactivated departments remain in historical assignment and audit records.</TableFooter>
       </>}
 
-      {tab==='Settings'&&<div className="am-settings-placeholder">
-        <span className="am-settings-icon"><Box size={23}/></span>
-        <h2>Settings design is coming next</h2>
-        <p>System preferences, resource policies, notifications, security, storage and system status will be implemented once the approved Settings screens are provided.</p>
-        <Badge tone="blue">Awaiting design</Badge>
-      </div>}
+      {tab==='Settings'&&<AdministrationSettings/>}
     </Card>
     <div className="am-preview-caption"><Badge tone="blue">UI preview</Badge>
       <span>Administrative records and actions are illustrative; no accounts, roles, branches or departments are changed.</span>
