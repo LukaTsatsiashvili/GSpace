@@ -324,6 +324,36 @@ router.patch('/:resourceId', allowEdit, run(async (req, res) => {
   } catch (err) { if (!handleError(err, res)) throw err; }
 }));
 
+
+router.post('/bulk/import', allowCreate, run(async (req, res) => {
+  // CSV imports are parsed on the client, but all rows are revalidated server-side.
+  const parsed = z.object({ resources: z.array(input.omit({ documents: true })).min(1).max(100) })
+    .strict().safeParse(req.body);
+  if (!parsed.success) { fail(res, 400, 'INVALID_INPUT', 'Import 1–100 valid resource rows'); return; }
+  const actor = principal(res);
+  try {
+    const codes = await withRetry(async tx => {
+      for (const row of parsed.data.resources) await validate(tx, { ...row, documents: [] }, actor);
+      const generated = await reserveIds(tx, parsed.data.resources.length);
+      await tx.resource.createMany({ data: parsed.data.resources.map((row, i) =>
+        ({ ...createData({ ...row, documents: [] }), assetCode: generated[i] })) });
+      const created = await tx.resource.findMany({ where: { assetCode: { in: generated } } });
+      await tx.resourceAuditEvent.createMany({ data: created.map(row => ({
+        resourceId: row.id, assetCode: row.assetCode, action: 'CREATED',
+        actorId: actor.userId, actorName: actor.fullName, after: auditResource(row)
+      })) });
+      await tx.securityAuditEvent.create({ data: {
+        action: 'RESOURCE_CSV_IMPORTED', success: true, actorUserId: actor.userId,
+        details: JSON.stringify({
+          quantity: generated.length, first: generated[0], last: generated.at(-1)
+        })
+      } });
+      return generated;
+    });
+    res.status(201).json({ count: codes.length, firstCode: codes[0], lastCode: codes.at(-1) });
+  } catch (err) { if (!handleError(err, res)) throw err; }
+}));
+
 router.post('/bulk', allowCreate, run(async (req, res) => {
   const parsed = z.object({
     template: input.omit({ documents: true, serialNumber: true }),
