@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { Box, ClipboardList, Download, ShieldCheck, X } from 'lucide-react';
+import { Box, ClipboardList, Download, FileDown, ShieldCheck, X } from 'lucide-react';
 import { Button, Input, NumberInput, Select } from '../components/ui';
 import { resourceApi, type Category, type Branch, type ResourcePayload, type ResourceCondition } from './resource-api';
+import { buildResourceCsvTemplate } from './resource-csv-template';
 import './new-resource.css';
 import './bulk-resource.css';
 
@@ -52,7 +53,7 @@ function parseCsv(text: string, categories: Category[], branches: Branch[], canF
     const value = template(label, category.name, branch.id, condition);
     const custom: Record<string, string> = {};
     for (const def of category.definitions) {
-      custom[def.key] = find(row, def.key.toLowerCase());
+      custom[def.key] = find(row, 'custom.' + def.key.toLowerCase()) || find(row, def.key.toLowerCase());
       if (def.required && !custom[def.key]) throw Error('Row ' + n + ': ' + def.label + ' is required.');
     }
     value.customFields = custom;
@@ -117,6 +118,21 @@ export default function BulkResourceDialog({ close, categories, branches, canFin
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
   }, [close, preview, pending]);
+  function downloadTemplate() {
+    setError('');
+    try {
+      const text = buildResourceCsvTemplate(categories, branches, canFinance);
+      const blob = new Blob([text], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'gspace-resources-template.csv';
+      document.body.append(link); link.click(); link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not prepare the CSV template.');
+    }
+  }
   async function review() {
     setError('');
     try {
@@ -183,6 +199,15 @@ export default function BulkResourceDialog({ close, categories, branches, canFin
               value={condition} options={conditions} onChange={value => setCondition(value as ResourceCondition)}/></label>
           </div><p className="bw-hint">Individual serial numbers can be added later through Edit resource.</p>
         </> : <>
+          <div className="bw-template-help">
+            <div className="bw-template-copy">
+              <strong>Start with a ready-to-fill CSV template</strong>
+              <span>Uses active branches and categories from PostgreSQL, with all current Custom Field columns.
+                Fill in the empty Name field, add or duplicate rows, then upload the same file.</span>
+            </div>
+            <Button icon={<FileDown size={16}/>} onClick={downloadTemplate}
+              disabled={!categories.length || !branches.length}>Download template</Button>
+          </div>
           <input ref={fileInput} className="nw-file-input" type="file" accept=".csv"
             onChange={event => {
               const chosen = event.target.files?.[0];
@@ -199,7 +224,7 @@ export default function BulkResourceDialog({ close, categories, branches, canFin
           <p className="bw-hint">Required headers: Name, Category, Branch, Condition.
             Optional: Serial number, Location, Description, Resource type, Warranty end,
             Purchase price, Currency, Purchase date, Supplier, Useful life months, Residual value,
-            and custom field keys.</p>
+            and custom field columns (custom.fieldKey).</p>
         </>}
         <div className="nw-notice bw-notice"><span><ShieldCheck size={18}/></span>
           <p><strong>Administrator-managed.</strong> Validation runs on the server for each row.
