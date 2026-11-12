@@ -311,9 +311,16 @@ router.patch('/:resourceId', allowEdit, run(async (req, res) => {
       if (!([ResourceStatus.AVAILABLE, ResourceStatus.RETIRED] as ResourceStatus[]).includes(prior.status)) throw Error('LIFECYCLE_LOCKED');
       if (!isCentral(actor) && parsed.data.branchId !== prior.branchId) throw Error('INVALID_BRANCH');
       await validate(tx, { ...parsed.data, documents: [] }, actor);
-      const after = await tx.resource.update({
-        where: { id: prior.id }, data: createData({ ...parsed.data, documents: [] })
-      });
+      // Editors without finance.edit must never erase or overwrite financial metadata.
+      const edits = createData({ ...parsed.data, documents: [] });
+      const data = actor.permissions.includes('finance.edit') ? edits : {
+        name: edits.name, category: edits.category, resourceType: edits.resourceType,
+        condition: edits.condition, status: edits.status, branchId: edits.branchId,
+        location: edits.location, serialNumber: edits.serialNumber,
+        description: edits.description, warrantyEnd: edits.warrantyEnd,
+        customFields: edits.customFields
+      };
+      const after = await tx.resource.update({ where: { id: prior.id }, data });
       await event(tx, actor, after, 'UPDATED', auditResource(prior));
       await tx.securityAuditEvent.create({ data: {
         action: 'RESOURCE_UPDATED', success: true, actorUserId: actor.userId,
