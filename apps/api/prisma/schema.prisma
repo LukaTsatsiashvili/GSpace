@@ -183,6 +183,20 @@ model Resource {
   @@index([createdAt])
 }
 
+model ResourceAuditEvent {
+  id         String   @id @default(uuid())
+  resourceId String
+  assetCode  String
+  action     String
+  actorId    String
+  actorName  String
+  before     Json?
+  after      Json?
+  createdAt  DateTime @default(now())
+
+  @@index([resourceId, createdAt])
+}
+
 model ResourceCounter {
   name        String @id
   nextNumber  Int

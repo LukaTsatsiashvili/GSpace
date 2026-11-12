@@ -67,3 +67,18 @@ INSERT INTO "ResourceCategory" ("id","name","active","definitions","createdAt","
 ('rcat-pos','POS Device',true,'[]',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP),
 ('rcat-other','Other',true,'[]',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
 ON CONFLICT ("id") DO NOTHING;
+
+-- Preserve the resource lifecycle trail even if unused assets are deleted.
+CREATE TABLE "ResourceAuditEvent" (
+  "id" TEXT NOT NULL,
+  "resourceId" TEXT NOT NULL,
+  "assetCode" TEXT NOT NULL,
+  "action" TEXT NOT NULL,
+  "actorId" TEXT NOT NULL,
+  "actorName" TEXT NOT NULL,
+  "before" JSONB,
+  "after" JSONB,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "ResourceAuditEvent_pkey" PRIMARY KEY ("id")
+);
+CREATE INDEX "ResourceAuditEvent_resourceId_createdAt_idx" ON "ResourceAuditEvent"("resourceId","createdAt");
