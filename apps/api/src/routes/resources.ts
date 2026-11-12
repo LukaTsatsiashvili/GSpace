@@ -100,7 +100,7 @@ type Upload = { filename: string; mimeType: string; content: Buffer };
 function decodeDocuments(files: ResourceInput['documents']): Upload[] {
   let total = 0;
   return files.map(file => {
-    if (/[\\/\x00-\x1f]/.test(file.filename) || !/^[A-Za-z0-9._ ()-]+$/.test(file.filename)) throw Error('INVALID_DOCUMENT');
+    if (/[\\/\x00-\x1f]/.test(file.filename) || !/^[\p{L}\p{N}._ ()-]+$/u.test(file.filename)) throw Error('INVALID_DOCUMENT');
     const allowed: Record<string, string[]> = {
       'application/pdf': ['.pdf'], 'image/png': ['.png'], 'image/jpeg': ['.jpg', '.jpeg'],
       'image/webp': ['.webp'], 'text/plain': ['.txt'], 'text/csv': ['.csv'],
@@ -289,7 +289,7 @@ router.get('/:resourceId/documents/:documentId', run(async (req, res) => {
   if (!file) { fail(res, 404, 'NOT_FOUND', 'Document not found'); return; }
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('Content-Type', 'application/octet-stream');
-  res.setHeader('Content-Disposition', 'attachment; filename="' + file.filename.replace(/["\\\r\n]/g, '_') + '"');
+  res.setHeader('Content-Disposition', 'attachment; filename="document"; filename*=UTF-8\'\'' + encodeURIComponent(file.filename));
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.send(Buffer.from(file.content));
 }));
