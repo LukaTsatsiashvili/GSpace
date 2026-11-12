@@ -40,12 +40,17 @@ model Branch {
   id          String       @id @default(uuid())
   name        String
   code        String       @unique
+  city        String       @default("")
+  managerId   String?
+  manager     User?        @relation("BranchManager", fields: [managerId], references: [id], onDelete: SetNull)
   active      Boolean      @default(true)
   users       User[]
   departments Department[]
   resources   Resource[]
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
+
+  @@index([managerId])
 }
 
 model Department {
@@ -53,12 +58,15 @@ model Department {
   name      String
   active    Boolean  @default(true)
   branchId  String
+  leadUserId String?
+  lead      User?     @relation("DepartmentLead", fields: [leadUserId], references: [id], onDelete: SetNull)
   branch    Branch   @relation(fields: [branchId], references: [id], onDelete: Restrict)
   users     User[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@unique([branchId, name])
+  @@index([leadUserId])
 }
 
 model User {
@@ -72,6 +80,8 @@ model User {
   role           Role             @relation(fields: [roleId], references: [id], onDelete: Restrict)
   branch         Branch           @relation(fields: [branchId], references: [id], onDelete: Restrict)
   department     Department?      @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  managedBranches Branch[]          @relation("BranchManager")
+  ledDepartments  Department[]      @relation("DepartmentLead")
   credential     UserCredential?
   invitations    AccountInvitation[]
   phone          String?
