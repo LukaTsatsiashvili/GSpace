@@ -82,8 +82,6 @@
 
 /* Connected Resources states and actions (theme-aware, shared controls retained). */
 .rs-status.in-transfer{background:var(--accent-soft);color:var(--accent)}
-.rs-feedback{display:flex;align-items:center;gap:10px;margin:0 19px 12px;padding:12px 15px;border:1px solid var(--border);border-radius:9px;color:var(--status-success-fg);background:var(--status-success-bg);font-size:12px;font-weight:700}
-.rs-feedback>button{margin-left:auto;border:0;background:transparent;color:inherit;display:grid;place-items:center;cursor:pointer}
 .rs-muted{font-size:12px;color:var(--muted);line-height:1.65}
 .rs-error{color:var(--danger);font-size:12px;line-height:1.6}
 .rs-live-documents{display:flex;flex-direction:column;gap:10px}
@@ -92,4 +90,11 @@
 .rs-live-audit{padding-left:20px;display:flex;flex-direction:column;gap:16px}
 .rs-live-audit li{padding:0 0 8px 5px}.rs-live-audit strong{display:block;font-size:12px}.rs-live-audit span{display:block;margin-top:5px;color:var(--muted);font-size:11px}
 .rs-confirm-actions{display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-top:17px}
-@media(max-width:650px){.rs-live-documents>div{flex-wrap:wrap}.rs-feedback{margin-inline:12px}}
+@media(max-width:650px){.rs-live-documents>div{flex-wrap:wrap}}
+
+/* Resource Details: clear separation between information groups. */
+.rs-drawer-content .rs-detail-section + .rs-detail-section{margin-top:28px;padding-top:26px;border-top:1px solid var(--border)}
+.rs-drawer-content .rs-detail-section h4{margin:0 0 21px;font-size:14px;line-height:1.4}
+.rs-drawer-content .rs-detail-fields{row-gap:26px;column-gap:32px}
+.rs-drawer-actions{display:flex;align-items:center;gap:10px;margin-left:auto}
+@media(max-width:550px){.rs-drawer-actions{gap:7px}.rs-drawer-actions .ui-button{padding-inline:9px;font-size:11px}.rs-drawer-footer{gap:9px}}

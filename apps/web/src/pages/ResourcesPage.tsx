@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { Button, Card, PageHeader, Select, SearchInput } from '../components/ui';
 import { useAuth } from '../auth/AuthGate';
+import { useToast } from '../components/toast';
 import NewResourceDialog from './NewResourceDialog';
 import BulkResourceDialog from './BulkResourceDialog';
 import ResourceCategoriesDialog from './ResourceCategoriesDialog';
@@ -58,6 +59,7 @@ function ResourceDrawer({ resource, close, canEdit, canDelete, onEdit, onRemoved
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const toast = useToast();
   const Icon = iconFor(resource.category);
   const editable = resource.status === 'AVAILABLE' || resource.status === 'RETIRED';
   useEffect(() => {
@@ -137,17 +139,17 @@ function ResourceDrawer({ resource, close, canEdit, canDelete, onEdit, onRemoved
             </dl>
           </div>}
         </>}
-        {tab === 'Documents' && <div className="rs-detail-section"><h4>Stored documents</h4>
+        {tab === 'Documents' && <div className="rs-detail-section">
           {resource.documents.length ? <div className="rs-live-documents">
             {resource.documents.map(file => <div key={file.id}>
               <div><strong>{file.filename}</strong><small>{Math.ceil(file.byteSize / 1024)} KB · {formatDate(file.createdAt)}</small></div>
               <Button onClick={() => { void downloadDocument(resource.id, file).catch(err =>
-                setError(err instanceof Error ? err.message : 'Download failed.')); }}
+                toast.error(err instanceof Error ? err.message : 'Download failed.')); }}
                 icon={<ArrowDownToLine size={15}/>}>Download</Button>
             </div>)}
           </div> : <p className="rs-muted">No documents were uploaded for this resource.</p>}
         </div>}
-        {tab === 'Audit timeline' && <div className="rs-detail-section"><h4>Resource audit history</h4>
+        {tab === 'Audit timeline' && <div className="rs-detail-section">
           {auditError && <p className="rs-error" role="alert">{auditError}</p>}
           {audit.length ? <ol className="rs-live-audit">{audit.map(event => <li key={event.id}>
             <strong>{event.action === 'CREATED' ? 'Resource registered' : event.action === 'UPDATED' ?
@@ -164,11 +166,13 @@ function ResourceDrawer({ resource, close, canEdit, canDelete, onEdit, onRemoved
       </div>
       <div className="rs-drawer-footer">
         <Button onClick={close}>Close</Button>
-        {canDelete && editable && <Button icon={<Trash2 size={15}/>}
-          onClick={() => setConfirmDelete(true)}>Delete unused</Button>}
-        <Button variant="primary" disabled={!canEdit || !editable} onClick={onEdit}>
-          Edit resource
-        </Button>
+        <div className="rs-drawer-actions">
+          {canDelete && editable && <Button icon={<Trash2 size={15}/>}
+            onClick={() => setConfirmDelete(true)}>Delete unused</Button>}
+          <Button variant="primary" disabled={!canEdit || !editable} onClick={onEdit}>
+            Edit resource
+          </Button>
+        </div>
       </div>
       {confirmDelete && <div className="rs-drawer-inline-overlay" onMouseDown={() => { if (!busy) setConfirmDelete(false); }}>
         <div className="rs-edit-notice" role="alertdialog" aria-modal="true" aria-label="Confirm resource deletion"
@@ -188,6 +192,7 @@ function ResourceDrawer({ resource, close, canEdit, canDelete, onEdit, onRemoved
 
 export default function ResourcesPage() {
   const { user } = useAuth();
+  const toast = useToast();
   const permissions = user.role.permissions;
   const canCreate = permissions.includes('assets.create') &&
     ['SYSTEM_ADMIN', 'COMPANY_ADMIN'].includes(user.role.key);
@@ -202,7 +207,6 @@ export default function ResourcesPage() {
   const [truncated, setTruncated] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState('All assets');
   const [status, setStatus] = useState<string>('All statuses');
@@ -237,14 +241,14 @@ export default function ResourcesPage() {
   const clearFilters = () => { setSearch(''); setStatus('All statuses'); setCategory('All categories'); setBranch('All branches'); };
   function saved(message: string) {
     setAdding(false); setEditing(null); setBulkOpen(false); setCategoryOpen(false); setSelected(null);
-    setNotice(message); void load();
+    toast.success(message); void load();
   }
   async function exportCsv() {
     if (!canExport) return;
     try {
       await exportResourceCsv(visible.map(resource => resource.id));
-      setNotice('CSV export completed and recorded in the security audit.');
-    } catch (err) { setError(err instanceof Error ? err.message : 'Export failed.'); }
+      toast.success('CSV export completed and recorded in the security audit.');
+    } catch (err) { toast.error(err instanceof Error ? err.message : 'Export failed.'); }
   }
 
   return <div className="rs-page"><PageHeader eyebrow="ASSET MANAGEMENT / RESOURCE REGISTER"
@@ -288,8 +292,6 @@ export default function ResourcesPage() {
           {view === 'list' ? <Grid2X2 size={16}/> : <List size={16}/>}
           {view === 'list' ? 'Cards' : 'List'}</button>
       </div>
-      {notice && <div className="rs-feedback" role="status"><Check size={17}/>{notice}
-        <button aria-label="Dismiss message" onClick={() => setNotice('')}><X size={15}/></button></div>}
       {error && <div className="rs-empty" role="alert"><p>{error}</p>
         <Button onClick={() => { void load(); }}>Retry</Button></div>}
       {loading ? <div className="rs-empty">Loading resources from PostgreSQL...</div> :
