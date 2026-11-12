@@ -234,11 +234,24 @@ function InvitationDialog({ path, close }: { path: string; close: () => void }) 
   return <Modal title="One-time activation link" description="Local development only — the link is shown once."
     close={close}
     footer={<><span className="am-spacer"/><Button variant="primary" onClick={close}>Done</Button></>}>
-    <p className="am-info">Copy this link and open it in a private/incognito window. It expires in 60 minutes.
-      No email has been sent. Do not share it with anyone except the intended employee.</p>
-    <div className="am-display-field"><small>Activation / Password reset link</small><strong>{fullUrl}</strong></div>
-    <Button onClick={() => { void navigator.clipboard.writeText(fullUrl).then(() => setCopied(true)); }}
-      icon={copied ? <Check size={16}/> : <Copy size={16}/>}>{copied ? 'Copied' : 'Copy link'}</Button>
+    <div className="am-invitation-content">
+      <p className="am-info am-invitation-guidance">
+        Copy the link and open it in a private/incognito window. The link expires in 60 minutes.
+        No email has been sent — share it only with the intended employee.
+      </p>
+      <div className="am-display-field am-invitation-link">
+        <small>Activation / Password reset link</small>
+        <strong>{fullUrl}</strong>
+      </div>
+      <div className="am-invitation-actions">
+        <Button onClick={() => {
+          void navigator.clipboard.writeText(fullUrl).then(() => setCopied(true))
+            .catch(() => setCopied(false));
+        }} icon={copied ? <Check size={16}/> : <Copy size={16}/>}>
+          {copied ? 'Copied' : 'Copy link'}
+        </Button>
+      </div>
+    </div>
   </Modal>;
 }
 export default function AdministrationUsers({ openCreate, closeCreate, onSummary }: {
