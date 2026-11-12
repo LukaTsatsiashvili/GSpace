@@ -286,7 +286,7 @@ router.post('/', allowCreate, run(async (req, res) => {
       const record = await tx.resource.create({
         data: { ...createData(parsed.data), assetCode: code,
           documents: { create: documents.map(file => ({
-            filename: file.filename, mimeType: file.mimeType, byteSize: file.content.length, content: file.content
+            filename: file.filename, mimeType: file.mimeType, byteSize: file.content.length, content: Uint8Array.from(file.content)
           })) } }
       });
       await event(tx, actor, record, 'CREATED');
@@ -308,7 +308,7 @@ router.patch('/:resourceId', allowEdit, run(async (req, res) => {
     await withRetry(async tx => {
       const prior = await tx.resource.findUnique({ where: { id: req.params.resourceId } });
       if (!prior || !canAccessBranch(actor.roleKey, actor.branchId, prior.branchId)) throw Error('NOT_FOUND');
-      if (![ResourceStatus.AVAILABLE, ResourceStatus.RETIRED].includes(prior.status)) throw Error('LIFECYCLE_LOCKED');
+      if (!([ResourceStatus.AVAILABLE, ResourceStatus.RETIRED] as ResourceStatus[]).includes(prior.status)) throw Error('LIFECYCLE_LOCKED');
       if (!isCentral(actor) && parsed.data.branchId !== prior.branchId) throw Error('INVALID_BRANCH');
       await validate(tx, { ...parsed.data, documents: [] }, actor);
       const after = await tx.resource.update({
@@ -363,7 +363,7 @@ router.delete('/:resourceId', allowEdit, run(async (req, res) => {
         where: { id: req.params.resourceId }, include: { _count: { select: { documents: true } } }
       });
       if (!prior) throw Error('NOT_FOUND');
-      if (![ResourceStatus.AVAILABLE, ResourceStatus.RETIRED].includes(prior.status)) throw Error('IN_USE');
+      if (!([ResourceStatus.AVAILABLE, ResourceStatus.RETIRED] as ResourceStatus[]).includes(prior.status)) throw Error('IN_USE');
       await tx.resource.delete({ where: { id: prior.id } });
       await event(tx, actor, prior, 'DELETED', auditResource(prior));
       await tx.securityAuditEvent.create({ data: {
