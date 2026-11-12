@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import { once } from 'node:events';
 import { app } from '../app.js';
 import { db } from '../db.js';
+import { hashPassword } from '../security/password.js';
 
 test('session login, CSRF, RBAC directory read and logout', { skip: !process.env.AUTH_INTEGRATION_TEST }, async () => {
   const server = app.listen(0);
@@ -97,6 +98,95 @@ test('session login, CSRF, RBAC directory read and logout', { skip: !process.env
       })
     });
     assert.equal(protectedEdit.status, 403);
+
+
+    // Branch and department CRUD: actual database writes and cross-branch safeguards.
+    const organization = await fetch(base + '/api/v1/admin/organization', { headers: { cookie: both } });
+    assert.equal(organization.status, 200);
+    const initialOrg = await organization.json() as { branches: { id: string; code: string }[] };
+    assert.ok(initialOrg.branches.some(branch => branch.code === 'HEAD_OFFICE'));
+
+    const orgWrite = (path: string, method: 'POST' | 'PATCH', body: object, cookies = both) =>
+      fetch(base + '/api/v1/admin/organization' + path, {
+        method, headers: { cookie: cookies, 'content-type': 'application/json', 'x-csrf-token': csrf.csrfToken },
+        body: JSON.stringify(body)
+      });
+    const createBranch = await orgWrite('/branches', 'POST', {
+      name: 'Test Organization Branch', code: 'TEST_ORG_BRANCH',
+      city: 'Tbilisi', managerId: null, active: true
+    });
+    assert.equal(createBranch.status, 201);
+    const branchId = (await createBranch.json() as { id: string }).id;
+    assert.ok(branchId);
+    assert.equal((await db.branch.findUniqueOrThrow({ where: { id: branchId } })).city, 'Tbilisi');
+
+    const duplicate = await orgWrite('/branches', 'POST', {
+      name: 'test organization branch', code: 'TEST_ORG_OTHER',
+      city: '', managerId: null, active: true
+    });
+    assert.equal(duplicate.status, 409);
+
+    const createDepartment = await orgWrite('/departments', 'POST', {
+      name: 'Support', branchId, leadUserId: null, active: true
+    });
+    assert.equal(createDepartment.status, 201);
+    const departmentId = (await createDepartment.json() as { id: string }).id;
+    assert.equal((await db.department.findUniqueOrThrow({ where: { id: departmentId } })).name, 'Support');
+
+    const disableBranchWithDepartment = await orgWrite('/branches/' + branchId, 'PATCH', {
+      name: 'Test Organization Branch', city: 'Tbilisi', managerId: null, active: false
+    });
+    assert.equal(disableBranchWithDepartment.status, 409);
+
+    const updateDepartment = await orgWrite('/departments/' + departmentId, 'PATCH', {
+      name: 'Support Operations', branchId, leadUserId: null, active: false
+    });
+    assert.equal(updateDepartment.status, 200);
+    assert.equal((await db.department.findUniqueOrThrow({ where: { id: departmentId } })).active, false);
+
+    // A user from a different branch cannot be assigned as the department lead.
+    const adminIdentity = await db.user.findUniqueOrThrow({
+      where: { email: process.env.BOOTSTRAP_ADMIN_EMAIL }
+    });
+    const invalidLead = await orgWrite('/departments/' + departmentId, 'PATCH', {
+      name: 'Support Operations', branchId, leadUserId: adminIdentity.id, active: true
+    });
+    assert.equal(invalidLead.status, 400);
+
+    const deactivateBranch = await orgWrite('/branches/' + branchId, 'PATCH', {
+      name: 'Test Organization Branch', city: 'Tbilisi', managerId: null, active: false
+    });
+    assert.equal(deactivateBranch.status, 200);
+    assert.equal((await db.branch.findUniqueOrThrow({ where: { id: branchId } })).active, false);
+
+    // Employee accounts must not have directory or administration access.
+    const employeeRole = await db.role.findUniqueOrThrow({ where: { key: 'EMPLOYEE' } });
+    const password = 'Organization integration test passphrase';
+    const employee = await db.user.create({
+      data: { email: 'test-organization-employee@example.test', fullName: 'Org Test Employee',
+        active: true, roleId: employeeRole.id, branchId: adminIdentity.branchId,
+        credential: { create: { passwordHash: await hashPassword(password) } } }
+    });
+    const loginEmployee = await fetch(base + '/api/v1/auth/login', {
+      method: 'POST',
+      headers: { cookie: csrfCookie, 'content-type': 'application/json', 'x-csrf-token': csrf.csrfToken },
+      body: JSON.stringify({ email: employee.email, password })
+    });
+    assert.equal(loginEmployee.status, 200);
+    const employeeCookie = loginEmployee.headers.get('set-cookie')?.split(';')[0];
+    assert.ok(employeeCookie);
+    const employeeCookies = csrfCookie + '; ' + employeeCookie;
+    const employeeRead = await fetch(base + '/api/v1/admin/organization', {
+      headers: { cookie: employeeCookies }
+    });
+    assert.equal(employeeRead.status, 403);
+    const employeeWrite = await orgWrite('/departments', 'POST', {
+      name: 'Forbidden Department', branchId: adminIdentity.branchId, leadUserId: null, active: true
+    }, employeeCookies);
+    assert.equal(employeeWrite.status, 403);
+
+    assert.ok((await db.securityAuditEvent.count({ where: { action: 'ADMIN_BRANCH_CREATED' } })) >= 1);
+    assert.ok((await db.securityAuditEvent.count({ where: { action: 'ADMIN_DEPARTMENT_UPDATED' } })) >= 1);
 
     const logout = await fetch(base + '/api/v1/auth/logout', {
       method: 'POST', headers: { cookie: both, 'content-type': 'application/json', 'x-csrf-token': csrf.csrfToken }, body: '{}'
