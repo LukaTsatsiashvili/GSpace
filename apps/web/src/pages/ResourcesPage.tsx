@@ -9,7 +9,7 @@ import NewResourceDialog from './NewResourceDialog';
 import BulkResourceDialog from './BulkResourceDialog';
 import ResourceCategoriesDialog from './ResourceCategoriesDialog';
 import {
-  resourceApi, downloadDocument, type ResourceRecord, type ResourceStatus,
+  resourceApi, downloadDocument, exportResourceCsv, type ResourceRecord, type ResourceStatus,
   type ResourceSummary, type Category, type Branch, type AuditEntry
 } from './resource-api';
 import './resources.css';
@@ -239,24 +239,19 @@ export default function ResourcesPage() {
     setAdding(false); setEditing(null); setBulkOpen(false); setCategoryOpen(false); setSelected(null);
     setNotice(message); void load();
   }
-  function exportCsv() {
+  async function exportCsv() {
     if (!canExport) return;
-    const columns = ['Asset ID', 'Name', 'Category', 'Branch', 'Location', 'Condition', 'Status', 'Serial'];
-    const csv = [columns, ...visible.map(r => [r.assetCode, r.name, r.category, r.branch, r.location,
-      r.condition, labels[r.status], r.serialNumber ?? ''])]
-      .map(row => row.map(value => '"' + value.replace(/"/g, '""') + '"').join(',')).join('\r\n');
-    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
-    const link = document.createElement('a');
-    link.href = url; link.download = 'gspace-resources.csv';
-    document.body.append(link); link.click(); link.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    try {
+      await exportResourceCsv(visible.map(resource => resource.id));
+      setNotice('CSV export completed and recorded in the security audit.');
+    } catch (err) { setError(err instanceof Error ? err.message : 'Export failed.'); }
   }
 
   return <div className="rs-page"><PageHeader eyebrow="ASSET MANAGEMENT / RESOURCE REGISTER"
     title="Resources" badgeLabel="PostgreSQL connected"
     description="Track, organize and manage company resources across branches."
     actions={<>
-      {canExport && <Button icon={<ArrowDownToLine size={15}/>} onClick={exportCsv}>Export CSV</Button>}
+      {canExport && <Button icon={<ArrowDownToLine size={15}/>} onClick={() => { void exportCsv(); }}>Export CSV</Button>}
       {canCreate && <Button icon={<Settings2 size={15}/>} onClick={() => setCategoryOpen(true)}>Categories</Button>}
       {canCreate && <Button icon={<ClipboardList size={15}/>} onClick={() => setBulkOpen(true)}>Bulk create</Button>}
       {canCreate && <Button variant="primary" icon={<Plus size={16}/>} onClick={() => setAdding(true)}>Add resource</Button>}
