@@ -217,6 +217,55 @@ test('session login, CSRF, RBAC directory read and logout', { skip: !process.env
     assert.ok((await db.securityAuditEvent.count({ where: { action: 'ADMIN_BRANCH_CREATED' } })) >= 1);
     assert.ok((await db.securityAuditEvent.count({ where: { action: 'ADMIN_DEPARTMENT_UPDATED' } })) >= 1);
 
+
+    // Administrator-issued reset link: the same activation endpoint accepts a six-character password.
+    const issueReset = await fetch(base + '/api/v1/admin/users/' + employee.id + '/reset-password', {
+      method: 'POST', headers: {
+        cookie: both, 'content-type': 'application/json', 'x-csrf-token': csrf.csrfToken
+      }, body: JSON.stringify({ reason: 'Employee requested a password reset.' })
+    });
+    assert.equal(issueReset.status, 200);
+    const resetPath = (await issueReset.json() as { activationPath: string }).activationPath;
+    const resetToken = new URLSearchParams(resetPath.split('#')[1]).get('activate');
+    assert.ok(resetToken);
+    const activatePassword = (passwordValue: string) => fetch(base + '/api/v1/auth/activate', {
+      method: 'POST', headers: {
+        cookie: csrfCookie, 'content-type': 'application/json', 'x-csrf-token': csrf.csrfToken
+      }, body: JSON.stringify({ token: resetToken, password: passwordValue })
+    });
+    assert.equal((await activatePassword('12345')).status, 400);
+    assert.equal((await activatePassword('A1bcde')).status, 204);
+    assert.equal((await activatePassword('A1bcde')).status, 400);
+
+    const loginWith = (passwordValue: string) => fetch(base + '/api/v1/auth/login', {
+      method: 'POST', headers: {
+        cookie: csrfCookie, 'content-type': 'application/json', 'x-csrf-token': csrf.csrfToken
+      }, body: JSON.stringify({ email: employee.email, password: passwordValue })
+    });
+    assert.equal((await loginWith(password)).status, 401);
+    const shortLogin = await loginWith('A1bcde');
+    assert.equal(shortLogin.status, 200);
+    const shortCookie = shortLogin.headers.get('set-cookie')?.split(';')[0];
+    assert.ok(shortCookie);
+    const activeEmployeeCookies = csrfCookie + '; ' + shortCookie;
+
+    // Self-service password change requires the old password, protects against reuse, and revokes sessions.
+    const change = (currentPassword: string, newPassword: string) => fetch(base + '/api/v1/auth/change-password', {
+      method: 'POST', headers: {
+        cookie: activeEmployeeCookies, 'content-type': 'application/json', 'x-csrf-token': csrf.csrfToken
+      }, body: JSON.stringify({ currentPassword, newPassword })
+    });
+    assert.equal((await change('A1bcde', 'short')).status, 400);
+    assert.equal((await change('incorrect', 'A1bcdef')).status, 403);
+    assert.equal((await change('A1bcde', 'A1bcde')).status, 400);
+    assert.equal((await change('A1bcde', 'A1bcdef')).status, 204);
+    assert.equal((await fetch(base + '/api/v1/auth/me', { headers: { cookie: activeEmployeeCookies } })).status, 401);
+    assert.equal((await loginWith('A1bcde')).status, 401);
+    assert.equal((await loginWith('A1bcdef')).status, 200);
+    assert.ok((await db.securityAuditEvent.count({
+      where: { action: 'AUTH_PASSWORD_CHANGED', actorUserId: employee.id }
+    })) >= 1);
+
     const logout = await fetch(base + '/api/v1/auth/logout', {
       method: 'POST', headers: { cookie: both, 'content-type': 'application/json', 'x-csrf-token': csrf.csrfToken }, body: '{}'
     });
