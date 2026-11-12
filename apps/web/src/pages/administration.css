@@ -143,56 +143,6 @@
 }
 @media(max-width:350px){.am-kpis{grid-template-columns:1fr}}
 
-/* Compact confirmation shared by the Administration Users and Roles sections. */
-.am-feedback{
-  position:fixed;
-  top:22px;
-  right:24px;
-  z-index:110;
-  display:flex;
-  align-items:flex-start;
-  gap:12px;
-  width:min(390px,calc(100vw - 32px));
-  padding:14px 12px 14px 14px;
-  border:1px solid color-mix(in srgb,var(--success) 30%,var(--border));
-  border-radius:12px;
-  background:color-mix(in srgb,var(--surface) 94%,var(--success) 6%);
-  color:var(--text);
-  box-shadow:0 14px 40px #0003;
-  animation:am-feedback-in 180ms ease-out;
-}
-.am-feedback-mark{
-  display:grid;
-  place-items:center;
-  flex:none;
-  width:34px;
-  height:34px;
-  border-radius:10px;
-  background:color-mix(in srgb,var(--success) 13%,transparent);
-  color:var(--success);
-}
-.am-feedback-copy{display:flex;flex:1;flex-direction:column;gap:4px;min-width:0;padding-top:1px}
-.am-feedback-copy strong{font-size:12px;font-weight:750;line-height:1.45;overflow-wrap:anywhere}
-.am-feedback-copy span{font-size:11px;line-height:1.45;color:var(--muted)}
-.am-feedback-dismiss.ui-button{
-  display:grid;
-  place-items:center;
-  flex:none;
-  width:28px;
-  min-height:28px;
-  height:28px;
-  padding:0;
-  border:0;
-  border-radius:7px;
-  background:transparent;
-  color:var(--muted);
-}
-.am-feedback-dismiss.ui-button:hover{background:var(--surface2);color:var(--text)}
-@keyframes am-feedback-in{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
-@media(max-width:650px){.am-feedback{top:12px;right:12px;width:calc(100vw - 24px)}}
-@media(prefers-reduced-motion:reduce){.am-feedback{animation:none}}
-
-
 /* One-time activation/reset link: keep guidance, URL and copy action legible and spaced. */
 .am-invitation-content{display:flex;flex-direction:column;gap:20px;min-width:0;padding:4px 0}
 .am-invitation-content .am-invitation-guidance{margin:0;padding:17px 19px;line-height:1.75}

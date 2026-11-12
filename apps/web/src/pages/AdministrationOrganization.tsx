@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import { Plus, X } from 'lucide-react';
 import { Button, Input, SearchInput, Select } from '../components/ui';
 import { useAuth } from '../auth/AuthGate';
-import AdministrationFeedback from './AdministrationFeedback';
+import { useToast } from '../components/toast';
 
 type Person = { id: string; name: string };
 type Employee = Person & { email: string; branchId: string };
@@ -198,8 +198,7 @@ export default function AdministrationOrganization({ kind, onChanged }: {
   const [organization, setOrganization] = useState<Organization | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
-  const dismissNotice = useCallback(() => setNotice(''), []);
+  const toast = useToast();
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('All statuses');
   const [editor, setEditor] = useState<Branch | Department | null | undefined>(undefined);
@@ -223,7 +222,7 @@ export default function AdministrationOrganization({ kind, onChanged }: {
   const isBranch = kind === 'branches';
   function saved() {
     setEditor(undefined);
-    setNotice((isBranch ? 'Branch' : 'Department') + ' saved successfully.');
+    toast.success((isBranch ? 'Branch' : 'Department') + ' saved successfully.');
     void load(); onChanged();
   }
   return <>
@@ -237,7 +236,6 @@ export default function AdministrationOrganization({ kind, onChanged }: {
       {canManage && <Button variant="primary" icon={<Plus size={16}/>}
         onClick={() => setEditor(null)}>{isBranch ? 'Add branch' : 'Add department'}</Button>}
     </div>
-    {notice && <AdministrationFeedback message={notice} onDismiss={dismissNotice}/>}
     {error && <div className="am-empty" role="alert">{error} <Button onClick={() => void load()}>Retry</Button></div>}
     {loading ? <div className="am-empty">Loading organization records from PostgreSQL...</div> :
       organization && <div className="am-table-scroll"><table className="am-table">

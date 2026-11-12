@@ -15,6 +15,7 @@ import ReportsPage from './pages/ReportsPage';
 import AuditPage from './pages/AuditPage';
 import AdministrationPage from './pages/AdministrationPage';
 import AccountSecurityDialog from './pages/AccountSecurityDialog';
+import { ToastProvider, ToastViewport, useToast } from './components/toast';
 import { useAuth, canOpenModule } from './auth/AuthGate';
 import { LogOut } from 'lucide-react';
 
@@ -30,9 +31,9 @@ function ModulePage({ label }: { label: string }) {
   return <Card className="module-panel"><SectionTabs tabs={['Overview', 'All records', 'Activity']} selected={tab} onChange={setTab}/><EmptyState title={`${label} · ${tab}`} description="The approved visual design will be connected to real data, business rules, permissions and API endpoints during module implementation." /></Card>;
 }
 
-export default function App() {
+function AppShell() {
   const { user, signOut } = useAuth();
-  const [logoutError, setLogoutError] = useState('');
+  const toast = useToast();
   const [profileOpen, setProfileOpen] = useState(false);
   const [currentId, setCurrentId] = useState(() => moduleFromHash().id);
   const [theme, setTheme] = useState<Theme>(getInitialTheme);
@@ -82,9 +83,8 @@ export default function App() {
         <span className="header-divider"/>
         <button className="icon-action" aria-label="Notifications (not yet connected)" disabled title="Notifications will be added with the backend workflows"><Bell size={19}/></button>
         <button type="button" className="profile profile-action" aria-label="Open my profile and security" title="My profile and security" onClick={() => setProfileOpen(true)}><div className="profile-avatar">{user.fullName.trim().split(/\s+/).slice(0,2).map(n=>n[0]).join('').toUpperCase()}</div><div className="profile-text"><strong>{user.fullName}</strong><small>{user.role.name}</small></div></button>
-        <button className="icon-action" aria-label="Sign out" title="Sign out" onClick={() => { void signOut().catch(() => setLogoutError('Could not sign out. Please try again.')); }}><LogOut size={19}/></button>
+        <button className="icon-action" aria-label="Sign out" title="Sign out" onClick={() => { void signOut().catch(() => toast.error('Could not sign out. Please try again.')); }}><LogOut size={19}/></button>
       </div></header>
-      {logoutError && <div className="auth-error-banner" role="alert">{logoutError}</div>}
       <main className="content">{current.id === 'overview' ? <OverviewPage navigate={navigate} firstName={user.fullName.trim().split(/\s+/)[0]}/> : current.id === 'resources' ? <ResourcesPage/> : current.id === 'assignments' ? <AssignmentsPage/> : current.id === 'approvals' ? <ApprovalsPage/> : current.id === 'transfers' ? <TransfersPage/> : current.id === 'inventory' ? <InventoryPage/> : current.id === 'licenses' ? <LicensesPage/> : current.id === 'maintenance' ? <MaintenancePage/> : current.id === 'finance' ? <FinancePage/> : current.id === 'reports' ? <ReportsPage/> : current.id === 'audit' ? <AuditPage/> : current.id === 'administration' ? <AdministrationPage/> : <>
         <PageHeader eyebrow={`${current.group} / RESOURCE MANAGEMENT`} title={current.label} description={current.description}/>
         <ModulePage key={current.id} label={current.label}/>
@@ -93,5 +93,10 @@ export default function App() {
       </main>
     </div>
     {profileOpen && <AccountSecurityDialog close={() => setProfileOpen(false)}/>}
+    <ToastViewport/>
   </div>;
+}
+
+export default function App() {
+  return <ToastProvider><AppShell/></ToastProvider>;
 }
