@@ -93,3 +93,25 @@ export async function asFilePayload(file: File): Promise<FilePayload> {
     reader.readAsDataURL(file);
   });
 }
+
+/** An audited, permission-checked download of only the visible resource selection. */
+export async function exportResourceCsv(ids: string[]): Promise<void> {
+  const csrf = await fetch('/api/v1/auth/csrf', { credentials: 'same-origin', cache: 'no-store' });
+  if (!csrf.ok) throw Error('Unable to initialize secure export.');
+  const { csrfToken } = await csrf.json() as { csrfToken: string };
+  const response = await fetch('/api/v1/resources/export', {
+    method: 'POST', credentials: 'same-origin', cache: 'no-store',
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+    body: JSON.stringify({ ids })
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({})) as { error?: { message?: string } };
+    throw Error(body.error?.message || 'Could not export resources.');
+  }
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url; link.download = 'gspace-resources.csv';
+  document.body.append(link); link.click(); link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
