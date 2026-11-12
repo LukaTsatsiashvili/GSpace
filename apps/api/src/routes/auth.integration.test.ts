@@ -185,6 +185,35 @@ test('session login, CSRF, RBAC directory read and logout', { skip: !process.env
     }, employeeCookies);
     assert.equal(employeeWrite.status, 403);
 
+    // Organization leadership follows employee branch changes.
+    const headOfficeRecord = await db.branch.findUniqueOrThrow({ where: { code: 'HEAD_OFFICE' } });
+    const setManager = await orgWrite('/branches/' + headOfficeRecord.id, 'PATCH', {
+      name: headOfficeRecord.name, city: headOfficeRecord.city, managerId: employee.id, active: true
+    });
+    assert.equal(setManager.status, 200);
+    const assignLead = await orgWrite('/departments', 'POST', {
+      name: 'Employee Leadership Test', branchId: headOfficeRecord.id,
+      leadUserId: employee.id, active: true
+    });
+    assert.equal(assignLead.status, 201);
+    const leadDepartmentId = (await assignLead.json() as { id: string }).id;
+    const reactivateBranch = await orgWrite('/branches/' + branchId, 'PATCH', {
+      name: 'Test Organization Branch', city: 'Tbilisi', managerId: null, active: true
+    });
+    assert.equal(reactivateBranch.status, 200);
+
+    const transferEmployee = await fetch(base + '/api/v1/admin/users/' + employee.id, {
+      method: 'PATCH', headers: {
+        cookie: both, 'content-type': 'application/json', 'x-csrf-token': csrf.csrfToken
+      }, body: JSON.stringify({ branchId, departmentId: null })
+    });
+    assert.equal(transferEmployee.status, 200);
+    assert.equal((await db.branch.findUniqueOrThrow({ where: { id: headOfficeRecord.id } })).managerId, null);
+    assert.equal((await db.department.findUniqueOrThrow({ where: { id: leadDepartmentId } })).leadUserId, null);
+    assert.ok((await db.securityAuditEvent.count({
+      where: { action: 'ADMIN_ORGANIZATION_LEADERSHIP_CLEARED', targetUserId: employee.id }
+    })) >= 1);
+
     assert.ok((await db.securityAuditEvent.count({ where: { action: 'ADMIN_BRANCH_CREATED' } })) >= 1);
     assert.ok((await db.securityAuditEvent.count({ where: { action: 'ADMIN_DEPARTMENT_UPDATED' } })) >= 1);
 
