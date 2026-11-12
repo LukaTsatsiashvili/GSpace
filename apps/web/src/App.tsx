@@ -14,6 +14,8 @@ import FinancePage from './pages/FinancePage';
 import ReportsPage from './pages/ReportsPage';
 import AuditPage from './pages/AuditPage';
 import AdministrationPage from './pages/AdministrationPage';
+import { useAuth, canOpenModule } from './auth/AuthGate';
+import { LogOut } from 'lucide-react';
 
 type Theme = 'light' | 'dark';
 
@@ -28,13 +30,16 @@ function ModulePage({ label }: { label: string }) {
 }
 
 export default function App() {
+  const { user, signOut } = useAuth();
+  const [logoutError, setLogoutError] = useState('');
   const [currentId, setCurrentId] = useState(() => moduleFromHash().id);
   const [theme, setTheme] = useState<Theme>(getInitialTheme);
   const [menuOpen, setMenuOpen] = useState(false);
   const [sidebarSearch, setSidebarSearch] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
-  const current = modules.find((item) => item.id === currentId) ?? modules[0];
-  const filteredModules = useMemo(() => modules.filter((item) => item.label.toLowerCase().includes(sidebarSearch.trim().toLowerCase())), [sidebarSearch]);
+  const permittedModules = useMemo(() => modules.filter(item => canOpenModule(item.id, user.role.permissions)), [user.role.permissions]);
+  const current = permittedModules.find((item) => item.id === currentId) ?? permittedModules[0];
+  const filteredModules = useMemo(() => permittedModules.filter((item) => item.label.toLowerCase().includes(sidebarSearch.trim().toLowerCase())), [permittedModules, sidebarSearch]);
 
   useEffect(() => {
     const update = () => setCurrentId(moduleFromHash().id);
@@ -42,6 +47,7 @@ export default function App() {
     return () => window.removeEventListener('hashchange', update);
   }, []);
   function navigate(id: string) {
+    if (!permittedModules.some(item => item.id === id)) return;
     window.location.hash = id;
     setCurrentId(id);
     setMenuOpen(false);
@@ -73,9 +79,11 @@ export default function App() {
         <button className="icon-action" aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`} onClick={toggleTheme}>{theme === 'dark' ? <Sun size={19}/> : <Moon size={19}/>}</button>
         <span className="header-divider"/>
         <button className="icon-action" aria-label="Notifications (not yet connected)" disabled title="Notifications will be added with the backend workflows"><Bell size={19}/></button>
-        <div className="profile"><div className="profile-avatar">SP</div><div className="profile-text"><strong>Sandro P.</strong><small>System Administrator · demo</small></div><ChevronDown size={14} className="profile-chevron"/></div>
+        <div className="profile"><div className="profile-avatar">{user.fullName.trim().split(/\s+/).slice(0,2).map(n=>n[0]).join('').toUpperCase()}</div><div className="profile-text"><strong>{user.fullName}</strong><small>{user.role.name}</small></div></div>
+        <button className="icon-action" aria-label="Sign out" title="Sign out" onClick={() => { void signOut().catch(() => setLogoutError('Could not sign out. Please try again.')); }}><LogOut size={19}/></button>
       </div></header>
-      <main className="content">{current.id === 'overview' ? <OverviewPage navigate={navigate}/> : current.id === 'resources' ? <ResourcesPage/> : current.id === 'assignments' ? <AssignmentsPage/> : current.id === 'approvals' ? <ApprovalsPage/> : current.id === 'transfers' ? <TransfersPage/> : current.id === 'inventory' ? <InventoryPage/> : current.id === 'licenses' ? <LicensesPage/> : current.id === 'maintenance' ? <MaintenancePage/> : current.id === 'finance' ? <FinancePage/> : current.id === 'reports' ? <ReportsPage/> : current.id === 'audit' ? <AuditPage/> : current.id === 'administration' ? <AdministrationPage/> : <>
+      {logoutError && <div className="auth-error-banner" role="alert">{logoutError}</div>}
+      <main className="content">{current.id === 'overview' ? <OverviewPage navigate={navigate} firstName={user.fullName.trim().split(/\s+/)[0]}/> : current.id === 'resources' ? <ResourcesPage/> : current.id === 'assignments' ? <AssignmentsPage/> : current.id === 'approvals' ? <ApprovalsPage/> : current.id === 'transfers' ? <TransfersPage/> : current.id === 'inventory' ? <InventoryPage/> : current.id === 'licenses' ? <LicensesPage/> : current.id === 'maintenance' ? <MaintenancePage/> : current.id === 'finance' ? <FinancePage/> : current.id === 'reports' ? <ReportsPage/> : current.id === 'audit' ? <AuditPage/> : current.id === 'administration' ? <AdministrationPage/> : <>
         <PageHeader eyebrow={`${current.group} / RESOURCE MANAGEMENT`} title={current.label} description={current.description}/>
         <ModulePage key={current.id} label={current.label}/>
         <div className="preview-notice"><Badge tone="blue">Development build</Badge><span>Visual shell and sample metrics only. All business operations require future authenticated API integration.</span></div>

@@ -1,0 +1,47 @@
+name: Auth foundation checks
+
+on:
+  push:
+    branches: [feature/auth-foundation]
+  pull_request:
+    branches: [GSpace-production]
+
+jobs:
+  validation:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: gspace_ci
+          POSTGRES_USER: gspace_ci
+          POSTGRES_PASSWORD: ci_password_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U gspace_ci -d gspace_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://gspace_ci:ci_password_only@127.0.0.1:5432/gspace_ci?schema=public
+      WEB_ORIGIN: http://localhost:5173
+      AUTH_SECRET: ci-only-random-example-not-for-real-deployment-2026
+      AUTH_INTEGRATION_TEST: "1"
+      BOOTSTRAP_ADMIN_EMAIL: ci-admin@example.test
+      BOOTSTRAP_ADMIN_NAME: CI Administrator
+      BOOTSTRAP_ADMIN_PASSWORD: "CI test passphrase only - never use in production 2026!"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm run db:generate
+      - run: npm run db:deploy -w @gspace/api
+      - run: npm run admin:bootstrap -w @gspace/api
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm run test -w @gspace/api

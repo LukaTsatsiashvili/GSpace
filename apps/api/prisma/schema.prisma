@@ -8,33 +8,139 @@ datasource db {
 }
 
 model Role {
-  id        String   @id @default(uuid())
-  key       String   @unique
-  name      String
-  users     User[]
-  createdAt DateTime @default(now())
+  id          String           @id @default(uuid())
+  key         String           @unique
+  name        String
+  description String           @default("")
+  protected   Boolean          @default(false)
+  active      Boolean          @default(true)
+  users       User[]
+  grants      RolePermission[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+}
+
+model Permission {
+  id          String           @id @default(uuid())
+  key         String           @unique
+  description String
+  roles       RolePermission[]
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Restrict)
+
+  @@id([roleId, permissionId])
 }
 
 model Branch {
-  id        String     @id @default(uuid())
+  id          String       @id @default(uuid())
+  name        String
+  code        String       @unique
+  active      Boolean      @default(true)
+  users       User[]
+  departments Department[]
+  resources   Resource[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model Department {
+  id        String   @id @default(uuid())
   name      String
-  code      String     @unique
+  active    Boolean  @default(true)
+  branchId  String
+  branch    Branch   @relation(fields: [branchId], references: [id], onDelete: Restrict)
   users     User[]
-  resources Resource[]
-  createdAt DateTime   @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([branchId, name])
 }
 
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  fullName  String
-  active    Boolean  @default(true)
-  roleId    String
-  branchId  String
-  role      Role     @relation(fields: [roleId], references: [id])
-  branch    Branch   @relation(fields: [branchId], references: [id])
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id             String           @id @default(uuid())
+  email          String           @unique
+  fullName       String
+  active         Boolean          @default(true)
+  roleId         String
+  branchId       String
+  departmentId   String?
+  role           Role             @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  branch         Branch           @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  department     Department?      @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  credential     UserCredential?
+  invitations    AccountInvitation[]
+  phone          String?
+  sessions       Session[]
+  actorEvents    SecurityAuditEvent[] @relation("AuditActor")
+  targetEvents   SecurityAuditEvent[] @relation("AuditTarget")
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+}
+
+model UserCredential {
+  userId            String   @id
+  passwordHash      String
+  passwordChangedAt DateTime @default(now())
+  mustChangePassword Boolean @default(false)
+  loginDisabled      Boolean @default(false)
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AccountInvitation {
+  id        String    @id @default(uuid())
+  tokenHash String    @unique
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind      String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, usedAt])
+  @@index([expiresAt])
+}
+
+model Session {
+  id         String    @id @default(uuid())
+  tokenHash  String    @unique
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt  DateTime  @default(now())
+  lastSeenAt DateTime  @default(now())
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  userAgent  String?
+
+  @@index([userId, revokedAt])
+  @@index([expiresAt])
+}
+
+model AuthThrottle {
+  key          String    @id
+  failures     Int       @default(0)
+  blockedUntil DateTime?
+  updatedAt    DateTime  @updatedAt
+}
+
+model SecurityAuditEvent {
+  id            String   @id @default(uuid())
+  action        String
+  success       Boolean
+  actorUserId   String?
+  targetUserId  String?
+  subjectHash   String?
+  details       String?
+  createdAt     DateTime @default(now())
+  actor         User?    @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  target        User?    @relation("AuditTarget", fields: [targetUserId], references: [id], onDelete: SetNull)
+
+  @@index([actorUserId, createdAt])
+  @@index([action, createdAt])
 }
 
 model Resource {
