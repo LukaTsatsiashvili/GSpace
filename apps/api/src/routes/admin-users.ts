@@ -194,6 +194,23 @@ router.patch('/users/:userId', asyncRoute(async (req, res) => {
           active: input.active ?? current.active
         }
       });
+      // A deactivated or transferred employee must not retain organizational leadership.
+      if (branchId !== current.branchId || (current.active && input.active === false)) {
+        const [managedBranches, ledDepartments] = await Promise.all([
+          tx.branch.updateMany({ where: { managerId: current.id }, data: { managerId: null } }),
+          tx.department.updateMany({ where: { leadUserId: current.id }, data: { leadUserId: null } })
+        ]);
+        if (managedBranches.count || ledDepartments.count) {
+          await tx.securityAuditEvent.create({ data: {
+            action: 'ADMIN_ORGANIZATION_LEADERSHIP_CLEARED', success: true,
+            actorUserId: actor.userId, targetUserId: current.id,
+            details: JSON.stringify({
+              reason: branchId !== current.branchId ? 'BRANCH_CHANGED' : 'ACCOUNT_DEACTIVATED',
+              branches: managedBranches.count, departments: ledDepartments.count
+            })
+          } });
+        }
+      }
       if (roleId !== current.roleId || branchId !== current.branchId ||
           input.active === false || (input.email && normalizeEmail(input.email) !== current.email)) {
         await tx.session.updateMany({ where: { userId: current.id, revokedAt: null }, data: { revokedAt: new Date() } });
