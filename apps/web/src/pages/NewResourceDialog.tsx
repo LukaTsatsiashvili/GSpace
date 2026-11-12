@@ -216,7 +216,7 @@ export default function NewResourceDialog({ close, branches, categories, resourc
           <div className="nw-section-title"><div><h3>Specifications &amp; location</h3>
             <p>Where the asset is located and category-specific information.</p></div><span>02 / 05</span></div>
           <div className="nw-fields">
-            <SelectField label="Branch" required value={form.branch} options={branches.map(b => b.name)}
+            <SelectField label="Branch" required value={branch?.name ?? ""} options={branches.map(b => b.name)}
               change={name => update('branch')(branches.find(b => b.name === name)?.id ?? '')}/>
             <Field label="Storage / location">{field('location', 'e.g. IT Storage — Shelf A')}</Field>
             <Field label="Serial number">{field('serial', 'Manufacturer serial')}</Field>
