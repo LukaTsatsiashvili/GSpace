@@ -121,7 +121,7 @@ function ActivateAccount({ token, done }: { token: string; done: () => void }) {
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (password.length < 15) { setError('Use a password with at least 15 characters.'); return; }
+    if (password.length < 6) { setError('Use a password with at least 6 characters.'); return; }
     if (password !== repeat) { setError('Passwords do not match.'); return; }
     setPending(true); setError('');
     try {
@@ -144,10 +144,10 @@ function ActivateAccount({ token, done }: { token: string; done: () => void }) {
       <form onSubmit={submit} className="auth-form">
         <label htmlFor="new-account-password">New password</label>
         <Input id="new-account-password" type="password" autoComplete="new-password"
-          minLength={15} maxLength={1024} required value={password} onChange={e=>setPassword(e.target.value)}/>
+          minLength={6} maxLength={1024} required value={password} onChange={e=>setPassword(e.target.value)}/>
         <label htmlFor="confirm-account-password">Confirm new password</label>
         <Input id="confirm-account-password" type="password" autoComplete="new-password"
-          minLength={15} required value={repeat} onChange={e=>setRepeat(e.target.value)}/>
+          minLength={6} required value={repeat} onChange={e=>setRepeat(e.target.value)}/>
         {error && <p className="auth-message" role="alert">{error}</p>}
         <Button type="submit" variant="primary" disabled={pending}>
           {pending ? 'Saving...' : 'Activate account'}

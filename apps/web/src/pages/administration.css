@@ -191,3 +191,15 @@
 @keyframes am-feedback-in{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
 @media(max-width:650px){.am-feedback{top:12px;right:12px;width:calc(100vw - 24px)}}
 @media(prefers-reduced-motion:reduce){.am-feedback{animation:none}}
+
+
+/* One-time activation/reset link: keep guidance, URL and copy action legible and spaced. */
+.am-invitation-content{display:flex;flex-direction:column;gap:20px;min-width:0;padding:4px 0}
+.am-invitation-content .am-invitation-guidance{margin:0;padding:17px 19px;line-height:1.75}
+.am-invitation-link{padding:17px 19px;gap:11px;min-height:74px;background:var(--surface2)}
+.am-invitation-link strong{font-size:12px;font-weight:700;line-height:1.7;overflow-wrap:anywhere;word-break:break-word;user-select:all}
+.am-invitation-actions{display:flex;align-items:center;justify-content:flex-start;gap:12px;padding-bottom:4px}
+@media(max-width:650px){
+  .am-invitation-content{gap:16px}
+  .am-invitation-content .am-invitation-guidance,.am-invitation-link{padding:15px}
+}

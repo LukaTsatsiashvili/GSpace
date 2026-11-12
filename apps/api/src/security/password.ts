@@ -17,7 +17,7 @@ function derive(password: string, salt: Buffer): Promise<Buffer> {
 
 /** Native, memory-hard scrypt (OWASP fallback when Argon2id is unavailable). */
 export async function hashPassword(password: string): Promise<string> {
-  if (password.length < 15 || password.length > 1024) throw new Error('Password must be 15–1024 characters long.');
+  if (password.length < 6 || password.length > 1024) throw new Error('Password must be 6–1024 characters long.');
   const salt = randomBytes(saltBytes);
   const digest = await derive(password, salt);
   return ['scrypt', 'v1', String(N), String(r), String(p), salt.toString('base64url'), digest.toString('base64url')].join('$');

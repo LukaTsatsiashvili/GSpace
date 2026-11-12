@@ -14,7 +14,10 @@ test('scrypt stores a salted hash and verifies the original password', async () 
 });
 
 test('password policy rejects short passwords and broken hashes', async () => {
-  await assert.rejects(hashPassword('too short'));
+  await assert.rejects(hashPassword('12345'));
+  const minimum = await hashPassword('123456');
+  assert.equal(await verifyPassword('123456', minimum), true);
+  assert.equal(await verifyPassword('12345', minimum), false);
   assert.equal(await verifyPassword('a', 'invalid'), false);
 });
 

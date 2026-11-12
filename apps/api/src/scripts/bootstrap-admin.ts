@@ -7,7 +7,7 @@ import { hashPassword, normalizeEmail } from '../security/password.js';
 const input = z.object({
   BOOTSTRAP_ADMIN_EMAIL: z.string().trim().email().max(254),
   BOOTSTRAP_ADMIN_NAME: z.string().trim().min(3).max(200),
-  BOOTSTRAP_ADMIN_PASSWORD: z.string().min(15).max(1024)
+  BOOTSTRAP_ADMIN_PASSWORD: z.string().min(6).max(1024)
 }).parse(process.env);
 
 async function main() {

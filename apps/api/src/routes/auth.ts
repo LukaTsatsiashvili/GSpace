@@ -15,7 +15,7 @@ const loginSchema = z.object({
 }).strict();
 const passwordSchema = z.object({
   currentPassword: z.string().min(1).max(1024),
-  newPassword: z.string().min(15).max(1024)
+  newPassword: z.string().min(6).max(1024)
 }).strict();
 
 const router = Router();
@@ -26,7 +26,7 @@ router.get('/csrf', issueCsrfToken);
 
 const activateSchema = z.object({
   token: z.string().min(32).max(256),
-  password: z.string().min(15).max(1024)
+  password: z.string().min(6).max(1024)
 }).strict();
 
 router.post('/activate', asyncRoute(async (req, res) => {
@@ -188,7 +188,7 @@ router.post('/sessions/revoke', requireAuth, asyncRoute(async (req, res) => {
 router.post('/change-password', requireAuth, asyncRoute(async (req, res) => {
   const input = passwordSchema.safeParse(req.body);
   if (!input.success) {
-    res.status(400).json({ error: { code: 'PASSWORD_POLICY', message: 'New password must have 15–1024 characters' } });
+    res.status(400).json({ error: { code: 'PASSWORD_POLICY', message: 'New password must have 6–1024 characters' } });
     return;
   }
   const auth = principal(res);
