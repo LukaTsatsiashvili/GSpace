@@ -2,7 +2,7 @@ name: Auth foundation checks
 
 on:
   push:
-    branches: [feature/auth-foundation]
+    branches: [feature/auth-foundation, feature/administration-roles]
   pull_request:
     branches: [GSpace-production]
 

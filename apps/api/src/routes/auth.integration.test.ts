@@ -48,6 +48,56 @@ test('session login, CSRF, RBAC directory read and logout', { skip: !process.env
     const directoryData = await directory.json() as { users: unknown[] };
     assert.equal(directoryData.users.length, 1);
 
+    const roles = await fetch(base + '/api/v1/admin/roles', { headers: { cookie: both } });
+    assert.equal(roles.status, 200);
+    const roleData = await roles.json() as { roles: { id: string; code: string; protected: boolean }[] };
+    const system = roleData.roles.find(r => r.code === 'SYSTEM_ADMIN');
+    assert.ok(system?.protected);
+
+    const badRole = await fetch(base + '/api/v1/admin/roles', {
+      method: 'POST', headers: { cookie: both, 'content-type': 'application/json', 'x-csrf-token': csrf.csrfToken },
+      body: JSON.stringify({
+        code: 'TEST_ROLE', name: 'Test Role', description: 'Temporary role',
+        permissions: ['permission.does-not-exist']
+      })
+    });
+    assert.equal(badRole.status, 400);
+
+    const createRole = await fetch(base + '/api/v1/admin/roles', {
+      method: 'POST', headers: { cookie: both, 'content-type': 'application/json', 'x-csrf-token': csrf.csrfToken },
+      body: JSON.stringify({
+        code: 'TEST_ROLE', name: 'Test Role', description: 'Temporary role',
+        permissions: ['assets.view']
+      })
+    });
+    assert.equal(createRole.status, 201);
+    const createdRole = await createRole.json() as { id: string };
+    assert.ok(createdRole.id);
+
+    const editRole = await fetch(base + '/api/v1/admin/roles/' + createdRole.id, {
+      method: 'PATCH', headers: { cookie: both, 'content-type': 'application/json', 'x-csrf-token': csrf.csrfToken },
+      body: JSON.stringify({
+        name: 'Test Role Updated', description: 'Changed by admin',
+        permissions: ['assets.view', 'assets.edit']
+      })
+    });
+    assert.equal(editRole.status, 200);
+
+    const edited = await db.role.findUniqueOrThrow({
+      where: { id: createdRole.id }, include: { grants: { include: { permission: true } } }
+    });
+    assert.equal(edited.name, 'Test Role Updated');
+    assert.deepEqual(edited.grants.map(g => g.permission.key).sort(), ['assets.edit', 'assets.view']);
+
+    const protectedEdit = await fetch(base + '/api/v1/admin/roles/' + system.id, {
+      method: 'PATCH', headers: { cookie: both, 'content-type': 'application/json', 'x-csrf-token': csrf.csrfToken },
+      body: JSON.stringify({
+        name: 'Corrupted System Admin', description: 'Unsafe',
+        permissions: ['assets.view']
+      })
+    });
+    assert.equal(protectedEdit.status, 403);
+
     const logout = await fetch(base + '/api/v1/auth/logout', {
       method: 'POST', headers: { cookie: both, 'content-type': 'application/json', 'x-csrf-token': csrf.csrfToken }, body: '{}'
     });

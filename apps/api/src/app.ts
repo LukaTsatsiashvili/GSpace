@@ -5,6 +5,7 @@ import { ZodError } from 'zod';
 import authRouter from './routes/auth.js';
 import adminRouter from './routes/admin.js';
 import adminUsersRouter from './routes/admin-users.js';
+import adminRolesRouter from './routes/admin-roles.js';
 import { csrfGuard } from './security/auth.js';
 
 export const app = express();
@@ -22,6 +23,7 @@ app.get('/api/health', (_req, res) => {
 app.use('/api/v1', csrfGuard);
 app.use('/api/v1/auth', authRouter);
 app.use('/api/v1/admin', adminUsersRouter);
+app.use('/api/v1/admin', adminRolesRouter);
 app.use('/api/v1/admin', adminRouter);
 app.use('/api', (_req, res) => {
   res.status(404).json({ error: { code: 'NOT_FOUND', message: 'API endpoint not found' } });
