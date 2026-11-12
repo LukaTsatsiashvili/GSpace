@@ -59,6 +59,8 @@ export const resourceApi = {
     request<{ ok: boolean }>('/' + encodeURIComponent(id), { method: 'PATCH', body }),
   bulk: (body: { quantity: number; template: Omit<ResourcePayload, 'serialNumber'> }) =>
     request<{ count: number; firstCode: string; lastCode: string }>('/bulk', { method: 'POST', body }),
+  importCsv: (resources: ResourcePayload[]) =>
+    request<{ count: number; firstCode: string; lastCode: string }>('/bulk/import', { method: 'POST', body: { resources } }),
   audit: (id: string) => request<{ events: AuditEntry[] }>('/' + encodeURIComponent(id) + '/audit'),
   remove: (id: string) => request<void>('/' + encodeURIComponent(id), { method: 'DELETE' }),
   categoryCreate: (body: { name: string; definitions: CustomDefinition[] }) =>
