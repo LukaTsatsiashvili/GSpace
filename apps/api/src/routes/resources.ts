@@ -162,7 +162,8 @@ function handleError(err: unknown, res: Response) {
     LIFECYCLE_LOCKED: [409, 'Assignment, transfer or maintenance status cannot be edited directly'],
     INVALID_STATE: [409, 'Only available or retired resources can be changed in this module'],
     IN_USE: [409, 'Only unused available or retired resources can be deleted'],
-    INACTIVE_CATEGORY: [409, 'Category has existing assets and cannot be deactivated']
+    INACTIVE_CATEGORY: [409, 'Category has existing assets and cannot be deactivated'],
+    CATEGORY_EXISTS: [409, 'A category with this name already exists']
   };
   const msg = err instanceof Error ? err.message : '';
   const known = errors[msg];
@@ -232,6 +233,34 @@ router.get('/', run(async (req, res) => {
     },
     truncated: total > rows.length
   });
+}));
+
+router.post('/export', requirePermission('reports.export'), run(async (req, res) => {
+  const parsed = z.object({ ids: z.array(uuid).max(500) }).strict().safeParse(req.body);
+  if (!parsed.success) { fail(res, 400, 'INVALID_INPUT', 'Select at most 500 resources to export'); return; }
+  const actor = principal(res);
+  const rows = await db.resource.findMany({
+    where: { id: { in: parsed.data.ids },
+      ...(isCentral(actor) ? {} : { branchId: actor.branchId }) },
+    include: { branch: { select: { name: true } } }, orderBy: { assetCode: 'asc' }
+  });
+  const escapeCsv = (value: string) => {
+    // Neutralize spreadsheet formula injection in attacker-controlled text fields.
+    const safe = /^[=+\-@\t\r]/.test(value) ? "'" + value : value;
+    return '"' + safe.replace(/"/g, '""').replace(/[\r\n]/g, ' ') + '"';
+  };
+  const lines = [['Asset ID', 'Name', 'Category', 'Branch', 'Location', 'Condition', 'Status', 'Serial'],
+    ...rows.map(row => [row.assetCode, row.name, row.category, row.branch.name,
+      row.location, row.condition, row.status, row.serialNumber ?? ''])];
+  const csv = lines.map(values => values.map(escapeCsv).join(',')).join('\r\n');
+  await db.securityAuditEvent.create({ data: {
+    action: 'RESOURCE_REGISTER_EXPORTED', success: true, actorUserId: actor.userId,
+    details: JSON.stringify({ count: rows.length })
+  } });
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="gspace-resources.csv"');
+  res.send(csv);
 }));
 
 router.get('/:resourceId/audit', run(async (req, res) => {
@@ -421,6 +450,9 @@ router.post('/categories', allowCreate, run(async (req, res) => {
   const actor = principal(res);
   try {
     const created = await withRetry(async tx => {
+      if (await tx.resourceCategory.findFirst({
+        where: { name: { equals: parsed.data.name, mode: 'insensitive' } }
+      })) throw Error('CATEGORY_EXISTS');
       const category = await tx.resourceCategory.create({ data: {
         name: parsed.data.name, definitions: parsed.data.definitions
       } });
@@ -445,6 +477,9 @@ router.patch('/categories/:categoryId', allowCreate, run(async (req, res) => {
     await withRetry(async tx => {
       const original = await tx.resourceCategory.findUnique({ where: { id: req.params.categoryId } });
       if (!original) throw Error('NOT_FOUND');
+      if (await tx.resourceCategory.findFirst({
+        where: { id: { not: original.id }, name: { equals: parsed.data.name, mode: 'insensitive' } }
+      })) throw Error('CATEGORY_EXISTS');
       if (parsed.data.name !== original.name && await tx.resource.count({ where: { category: original.name } })) {
         throw Error('INACTIVE_CATEGORY');
       }
