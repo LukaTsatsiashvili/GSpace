@@ -91,7 +91,6 @@ export default function AccountSecurityDialog({ close }: { close: () => void }) 
               <div key={label}><small>{label}</small><strong>{value}</strong></div>)}
           </div>
           <p className="account-security-note">Profile and organizational assignments are managed by your administrator.</p>
-          <Button onClick={() => setTab('Security')} icon={<KeyRound size={16}/>}>Password & security</Button>
         </div>}
         {tab === 'Security' && (changed ? <div className="account-security-success" role="status">
           <span><ShieldCheck size={26}/></span>

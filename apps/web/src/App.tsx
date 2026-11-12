@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Bell, Boxes, ChevronDown, Menu, Moon, Sun, ArrowUpRight } from 'lucide-react';
+import { Bell, Boxes, Menu, Moon, Sun, ArrowUpRight } from 'lucide-react';
 import { modules, moduleGroups, moduleFromHash } from './modules';
 import { Badge, Card, EmptyState, PageHeader, SectionTabs, SearchInput } from './components/ui';
 import OverviewPage from './pages/OverviewPage';
@@ -81,7 +81,7 @@ export default function App() {
         <button className="icon-action" aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`} onClick={toggleTheme}>{theme === 'dark' ? <Sun size={19}/> : <Moon size={19}/>}</button>
         <span className="header-divider"/>
         <button className="icon-action" aria-label="Notifications (not yet connected)" disabled title="Notifications will be added with the backend workflows"><Bell size={19}/></button>
-        <button type="button" className="profile profile-action" aria-label="Open my profile and security" title="My profile and security" onClick={() => setProfileOpen(true)}><div className="profile-avatar">{user.fullName.trim().split(/\s+/).slice(0,2).map(n=>n[0]).join('').toUpperCase()}</div><div className="profile-text"><strong>{user.fullName}</strong><small>{user.role.name}</small></div><ChevronDown className="profile-chevron" size={15}/></button>
+        <button type="button" className="profile profile-action" aria-label="Open my profile and security" title="My profile and security" onClick={() => setProfileOpen(true)}><div className="profile-avatar">{user.fullName.trim().split(/\s+/).slice(0,2).map(n=>n[0]).join('').toUpperCase()}</div><div className="profile-text"><strong>{user.fullName}</strong><small>{user.role.name}</small></div></button>
         <button className="icon-action" aria-label="Sign out" title="Sign out" onClick={() => { void signOut().catch(() => setLogoutError('Could not sign out. Please try again.')); }}><LogOut size={19}/></button>
       </div></header>
       {logoutError && <div className="auth-error-banner" role="alert">{logoutError}</div>}
