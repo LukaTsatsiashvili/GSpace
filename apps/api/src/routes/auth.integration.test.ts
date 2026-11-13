@@ -510,6 +510,45 @@ test('session login, CSRF, RBAC directory read and logout', { skip: !process.env
       { headers: { cookie: both } });
     assert.equal((await completed.json() as { assignment: { status: string } }).assignment.status, 'Completed');
 
+    // Employee-to-employee transfer retains custody until the new recipient accepts.
+    const original = await assignmentWrite('/', both, {
+      recipientId: employee.id, resourceIds: [incompleteResource.id], dueAt: null, notes: 'Transfer source'
+    });
+    assert.equal(original.status, 201);
+    const originalId = (await original.json() as { id: string }).id;
+    const originalItem = await db.assignmentItem.findFirstOrThrow({ where: { assignmentId: originalId } });
+    assert.equal((await assignmentWrite('/' + originalId + '/receipt', employeeCookies, {
+      decisions: [{ itemId: originalItem.id, decision: 'ACCEPT', notes: '' }]
+    })).status, 200);
+    const beginTransfer = () => assignmentWrite('/' + originalId + '/transfers', both, {
+      recipientId: adminIdentity.id, itemIds: [originalItem.id], dueAt: null, notes: 'To colleague'
+    });
+    const firstTransfer = await beginTransfer();
+    assert.equal(firstTransfer.status, 201);
+    const transferId = (await firstTransfer.json() as { id: string }).id;
+    assert.equal((await db.assignmentItem.findUniqueOrThrow({ where: { id: originalItem.id } })).status, 'TRANSFER_PENDING');
+    assert.equal((await assignmentWrite('/' + transferId + '/transfers/cancel', both, {})).status, 200);
+    assert.equal((await db.assignmentItem.findUniqueOrThrow({ where: { id: originalItem.id } })).status, 'ACCEPTED');
+    const secondTransfer = await beginTransfer();
+    assert.equal(secondTransfer.status, 201);
+    const secondTransferId = (await secondTransfer.json() as { id: string }).id;
+    const nextItem = await db.assignmentItem.findFirstOrThrow({ where: { assignmentId: secondTransferId } });
+    assert.equal((await assignmentWrite('/' + secondTransferId + '/receipt', employeeCookies, {
+      decisions: [{ itemId: nextItem.id, decision: 'ACCEPT', notes: '' }]
+    })).status, 403);
+    assert.equal((await assignmentWrite('/' + secondTransferId + '/receipt', both, {
+      decisions: [{ itemId: nextItem.id, decision: 'ACCEPT', notes: '' }]
+    })).status, 200);
+    assert.equal((await db.assignmentItem.findUniqueOrThrow({ where: { id: originalItem.id } })).status, 'TRANSFERRED');
+    assert.equal((await assignmentWrite('/' + secondTransferId + '/returns/request', both, {
+      itemIds: [nextItem.id]
+    })).status, 200);
+    assert.equal((await assignmentWrite('/' + secondTransferId + '/returns/verify', both, {
+      items: [{ itemId: nextItem.id, condition: 'Excellent' }]
+    })).status, 200);
+    assert.equal((await db.resource.findUniqueOrThrow({ where: { id: incompleteResource.id } })).status, 'AVAILABLE');
+    assert.ok((await db.securityAuditEvent.count({ where: { action: 'ASSIGNMENT_TRANSFER_STARTED' } })) >= 1);
+
     const employeeRead = await fetch(base + '/api/v1/admin/organization', {
       headers: { cookie: employeeCookies }
     });
