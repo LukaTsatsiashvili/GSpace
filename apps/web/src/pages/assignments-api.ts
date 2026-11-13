@@ -26,7 +26,7 @@ export type Lookups = {
 };
 export type Summary = { active: number; pending: number; returns: number; completed: number };
 export type Receipt = {
-  itemId: string; decision: 'ACCEPT' | 'REPORT_ISSUE'; notes: string;
+  itemId: string; decision: 'ACCEPT' | 'REPORT_ISSUE'; notes: string; damageReported?: boolean;
   evidence?: { filename: string; mimeType: string; base64: string };
 };
 async function request<T>(path: string, body?: object): Promise<T> {
