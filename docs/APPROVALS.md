@@ -44,7 +44,7 @@ All writes require a valid authenticated session and CSRF token.
 
 1. Back up the target development database.
 2. On the feature branch run `npm ci`, `npm run db:generate`, `npm run db:deploy -w @gspace/api`, then `npm run dev`.
-3. Re-run `npm run admin:bootstrap -w @gspace/api` **only in the established approved bootstrap context** if required to seed the newly introduced permissions. The application does not automatically grant itself these on migration.
+3. The additive migration provisions new approval permissions for existing standard roles. **Do not rerun the first-administrator bootstrap on an existing database** (it correctly refuses to run). Custom roles can be granted the new permissions using Administration → Roles.
 4. Create a request type with actual reviewer users or roles in an active branch.
 5. Sign in as a requester to submit; sign in as each reviewer to confirm `ANY` and `ALL` behavior, rejection, changes, resubmission, cancellation, immutable history and Export.
 6. Test with a different branch, an unauthorised employee and changed role permissions before approval.
