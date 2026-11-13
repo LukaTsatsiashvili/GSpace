@@ -97,7 +97,8 @@ const include = {
   issuedBy: { select: { id: true, fullName: true } },
   items: { include: {
     resource: { select: { id: true, assetCode: true, name: true, branchId: true, condition: true } },
-    evidence: { select: { id: true, filename: true, mimeType: true, byteSize: true } }
+    evidence: { select: { id: true, filename: true, mimeType: true, byteSize: true } },
+    sourceItem: { select: { assignment: { select: { recipientId: true } } } }
   }, orderBy: { createdAt: 'asc' } },
   events: { orderBy: { createdAt: 'desc' }, take: 100 }
 } satisfies Prisma.AssignmentInclude;
@@ -123,6 +124,7 @@ function serialize(row: Row) {
       itemId: item.id, resourceId: item.resourceId,
       id: item.resource.assetCode, name: item.resource.name, condition: item.conditionOnIssue,
       receipt: item.status, sourceItemId: item.sourceItemId,
+      sourceRecipientId: item.sourceItem?.assignment.recipientId ?? null,
       evidence: item.evidence && { filename: item.evidence.filename, mimeType: item.evidence.mimeType, byteSize: item.evidence.byteSize },
       receiptNotes: item.receiptNotes, acceptedAt: item.acceptedAt, returnedAt: item.returnedAt,
       returnCondition: item.returnCondition
@@ -208,9 +210,14 @@ router.get('/lookups', run(async (_req, res) => {
 
 router.get('/', run(async (_req, res) => {
   const actor = principal(res);
+  const personal: Prisma.AssignmentWhereInput = { OR: [
+    { recipientId: actor.userId },
+    { kind: 'EMPLOYEE_TRANSFER', items: { some: {
+      sourceItem: { assignment: { recipientId: actor.userId } }
+    } } }
+  ] };
   const where: Prisma.AssignmentWhereInput = actor.permissions.includes('assignments.manage') ?
-    isCentral(actor) ? {} : { OR: [{ branchId: actor.branchId }, { recipientId: actor.userId }] } :
-    { recipientId: actor.userId };
+    isCentral(actor) ? {} : { OR: [{ branchId: actor.branchId }, personal] } : personal;
   const rows = await db.assignment.findMany({ where, include, orderBy: { createdAt: 'desc' }, take: 200 });
   const total = await db.assignment.count({ where });
   const all = rows.map(serialize);
@@ -229,7 +236,10 @@ router.get('/', run(async (_req, res) => {
 router.get('/:assignmentId', run(async (req, res) => {
   const actor = principal(res);
   const row = await db.assignment.findUnique({ where: { id: req.params.assignmentId }, include });
-  if (!row || !canSee(actor, row)) { fail(res, 404, 'NOT_FOUND', 'Assignment not found'); return; }
+  if (!row || !(canSee(actor, row) || row.items.some(item =>
+    item.sourceItem?.assignment.recipientId === actor.userId))) {
+    fail(res, 404, 'NOT_FOUND', 'Assignment not found'); return;
+  }
   res.json({ assignment: serialize(row) });
 }));
 
