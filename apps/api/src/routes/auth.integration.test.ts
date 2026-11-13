@@ -464,6 +464,52 @@ test('session login, CSRF, RBAC directory read and logout', { skip: !process.env
     const employeeCookie = loginEmployee.headers.get('set-cookie')?.split(';')[0];
     assert.ok(employeeCookie);
     const employeeCookies = csrfCookie + '; ' + employeeCookie;
+    // Persisted assignments: issue, recipient acknowledgement, and verified return.
+    const assignmentWrite = (suffix: string, cookies: string, body: object) =>
+      fetch(base + '/api/v1/assignments' + suffix, {
+        method: 'POST',
+        headers: { cookie: cookies, 'content-type': 'application/json', 'x-csrf-token': csrf.csrfToken },
+        body: JSON.stringify(body)
+      });
+    assert.equal((await fetch(base + '/api/v1/assignments')).status, 401);
+    const deniedIssue = await assignmentWrite('/', employeeCookies, {
+      recipientId: employee.id, resourceIds: [incompleteResource.id], dueAt: null, notes: ''
+    });
+    assert.equal(deniedIssue.status, 403);
+    const createdAssignment = await assignmentWrite('/', both, {
+      recipientId: employee.id, resourceIds: [incompleteResource.id], dueAt: null, notes: 'Test handover'
+    });
+    assert.equal(createdAssignment.status, 201);
+    const assignmentId = (await createdAssignment.json() as { id: string }).id;
+    const item = await db.assignmentItem.findFirstOrThrow({ where: { assignmentId } });
+    assert.equal((await db.resource.findUniqueOrThrow({ where: { id: incompleteResource.id } })).status, 'ASSIGNED');
+    assert.equal((await assignmentWrite('/', both, {
+      recipientId: employee.id, resourceIds: [incompleteResource.id], dueAt: null, notes: ''
+    })).status, 409);
+    assert.equal((await assignmentWrite('/' + assignmentId + '/receipt', both, {
+      decisions: [{ itemId: item.id, decision: 'ACCEPT', notes: '' }]
+    })).status, 403);
+    assert.equal((await assignmentWrite('/' + assignmentId + '/receipt', employeeCookies, {
+      decisions: [{ itemId: item.id, decision: 'ACCEPT', notes: 'Confirmed in test' }]
+    })).status, 200);
+    assert.equal((await assignmentWrite('/' + assignmentId + '/receipt', employeeCookies, {
+      decisions: [{ itemId: item.id, decision: 'ACCEPT', notes: 'Duplicate' }]
+    })).status, 409);
+    assert.equal((await assignmentWrite('/' + assignmentId + '/returns/request', employeeCookies, {
+      itemIds: [item.id]
+    })).status, 200);
+    assert.equal((await assignmentWrite('/' + assignmentId + '/returns/verify', employeeCookies, {
+      items: [{ itemId: item.id, condition: 'Good' }]
+    })).status, 403);
+    assert.equal((await assignmentWrite('/' + assignmentId + '/returns/verify', both, {
+      items: [{ itemId: item.id, condition: 'Good' }]
+    })).status, 200);
+    assert.equal((await db.resource.findUniqueOrThrow({ where: { id: incompleteResource.id } })).status, 'AVAILABLE');
+    assert.equal((await resourceApi('/' + incompleteResource.id, 'DELETE', {})).status, 409);
+    const completed = await fetch(base + '/api/v1/assignments/' + assignmentId,
+      { headers: { cookie: both } });
+    assert.equal((await completed.json() as { assignment: { status: string } }).assignment.status, 'Completed');
+
     const employeeRead = await fetch(base + '/api/v1/admin/organization', {
       headers: { cookie: employeeCookies }
     });
