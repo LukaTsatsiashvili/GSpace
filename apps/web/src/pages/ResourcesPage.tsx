@@ -197,7 +197,6 @@ export default function ResourcesPage() {
   const canCreate = permissions.includes('assets.create') &&
     ['SYSTEM_ADMIN', 'COMPANY_ADMIN'].includes(user.role.key);
   const canEdit = permissions.includes('assets.edit');
-  const canFinance = permissions.includes('finance.edit');
   const canDelete = canEdit && ['SYSTEM_ADMIN', 'COMPANY_ADMIN'].includes(user.role.key);
   const canExport = permissions.includes('reports.export');
   const [resources, setResources] = useState<ResourceRecord[]>([]);
@@ -339,7 +338,7 @@ export default function ResourcesPage() {
       branches={branches} categories={categories}
       close={() => { setAdding(false); setEditing(null); }}
       saved={code => saved(code + (editing ? ' updated.' : ' registered.'))}/>}
-    {bulkOpen && <BulkResourceDialog branches={branches} categories={categories} canFinance={canFinance}
+    {bulkOpen && <BulkResourceDialog branches={branches} categories={categories}
       close={() => setBulkOpen(false)} saved={saved}/>}
     {categoryOpen && <ResourceCategoriesDialog categories={categories}
       close={() => setCategoryOpen(false)} saved={() => saved('Resource category saved.')}/>}
