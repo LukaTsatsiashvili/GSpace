@@ -64,3 +64,19 @@ export const assignmentsApi = {
   cancelTransfer: (id: string) =>
     request<{ ok: boolean }>('/' + encodeURIComponent(id) + '/transfers/cancel', {})
 };
+
+export async function downloadEvidence(assignmentId: string, itemId: string, filename: string): Promise<void> {
+  const url = '/api/v1/assignments/' + encodeURIComponent(assignmentId) + '/items/' +
+    encodeURIComponent(itemId) + '/evidence';
+  const response = await fetch(url, { credentials: 'same-origin', cache: 'no-store' });
+  if (!response.ok) throw Error('Could not download the receipt photo');
+  const blob = await response.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = objectUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+}
