@@ -124,6 +124,7 @@ function ReceiptDialog({ assignment, close, done }: {
   const pending = assignment.assets.filter(item => item.receipt === 'PENDING');
   const [decisions, setDecisions] = useState<Record<string, Decision>>({});
   const [files, setFiles] = useState<Record<string, File | undefined>>({});
+  const [damaged, setDamaged] = useState<Record<string, boolean>>({});
   const [notes, setNotes] = useState('');
   const [review, setReview] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -135,9 +136,9 @@ function ReceiptDialog({ assignment, close, done }: {
       const entries: Receipt[] = [];
       for (const item of selected) {
         const file = files[item.itemId];
-        if (item.condition === 'Damaged' && !file) throw Error('Photo evidence is required for damaged item: ' + item.name);
+        if ((item.condition === 'Damaged' || damaged[item.itemId]) && !file) throw Error('Photo evidence is required for damaged item: ' + item.name);
         entries.push({ itemId: item.itemId, decision: decisions[item.itemId] === 'Accept' ? 'ACCEPT' : 'REPORT_ISSUE',
-          notes, ...(file ? { evidence: await asFilePayload(file) } : {}) });
+          notes, damageReported: !!damaged[item.itemId], ...(file ? { evidence: await asFilePayload(file) } : {}) });
       }
       if (!entries.length) throw Error('Choose at least one item to confirm');
       await assignmentsApi.receipt(assignment.id, entries);
@@ -164,9 +165,13 @@ function ReceiptDialog({ assignment, close, done }: {
           <Select label={'Receipt decision for ' + item.name} value={decisions[item.itemId] || 'Decide later'}
             options={['Decide later', 'Accept', 'Report issue']}
             onChange={v => setDecisions(current => ({ ...current, [item.itemId]: v as Decision }))}/></div>
+        {decisions[item.itemId] === 'Report issue' && <label className="as-asset-choice" style={{ margin: '0 13px 10px' }}>
+          <Checkbox checked={!!damaged[item.itemId]} onChange={event => setDamaged(prev => ({ ...prev, [item.itemId]: event.target.checked }))}/>
+          <span className="as-choice-text"><strong>This item is damaged</strong><small>Photo evidence will be required</small></span>
+        </label>}
         {(decisions[item.itemId] === 'Report issue' || (item.condition === 'Damaged' && decisions[item.itemId] === 'Accept')) &&
           <div className="as-receipt-evidence"><label htmlFor={'as-evidence-' + item.itemId}>
-            Photo evidence {item.condition === 'Damaged' ? '(required)' : '(optional)'}</label>
+            Photo evidence {item.condition === 'Damaged' || damaged[item.itemId] ? '(required)' : '(optional)'}</label>
             <input hidden type="file" id={'as-evidence-' + item.itemId} accept="image/jpeg,image/png,image/webp"
               onChange={event => setFiles(prev => ({ ...prev, [item.itemId]: event.target.files?.[0] }))}/>
             <Button onClick={() => document.getElementById('as-evidence-' + item.itemId)?.click()}>
