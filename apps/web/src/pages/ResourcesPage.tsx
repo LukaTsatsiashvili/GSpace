@@ -50,6 +50,12 @@ function StatusPill({ status }: { status: ResourceStatus }) {
   return <span className={'rs-status ' + label.toLowerCase().replace(/\s+/g, '-')}>
     <span/>{label}</span>;
 }
+function auditFileLabel(entry: AuditEntry): string | null {
+  const source = entry.action === 'DOCUMENT_DELETED' ? entry.before : entry.after;
+  if (!source || typeof source !== 'object' || !('document' in source)) return null;
+  const data = (source as { document?: { filename?: unknown } }).document;
+  return typeof data?.filename === 'string' ? data.filename : null;
+}
 function ResourceDrawer({ resource, categories, close, canEdit, canDelete, onEdit, onRemoved,
   onDocumentsChange }: {
   resource: ResourceRecord; categories: Category[];
@@ -171,6 +177,7 @@ function ResourceDrawer({ resource, categories, close, canEdit, canDelete, onEdi
             <strong>{event.action === 'CREATED' ? 'Resource registered' : event.action === 'UPDATED' ?
               'Resource updated' : event.action === 'DOCUMENT_ADDED' ?
               'Document added' : event.action === 'DOCUMENT_DELETED' ? 'Document deleted' : event.action}</strong>
+            {auditFileLabel(event) && <span className="rs-audit-file">{auditFileLabel(event)}</span>}
             <span>{formatDate(event.createdAt)} · {event.actorName}</span>
           </li>)}</ol> : !auditError && <p className="rs-muted">No audit history to display.</p>}
         </div>}

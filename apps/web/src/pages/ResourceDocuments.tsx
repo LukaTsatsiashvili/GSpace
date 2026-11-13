@@ -1,4 +1,4 @@
-import { useRef, useState, type ChangeEvent } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { ArrowDownToLine, FilePlus2, FileText, Trash2, X } from 'lucide-react';
 import { Button } from '../components/ui';
 import { useToast } from '../components/toast';
@@ -37,6 +37,19 @@ export default function ResourceDocuments({
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<DocumentMeta | null>(null);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!confirmDelete) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !busy) {
+        event.stopPropagation();
+        setConfirmDelete(null);
+        setError('');
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [confirmDelete, busy]);
 
   const remaining = MAX_DOCUMENTS - resource.documents.length;
   const totalBytes = resource.documents.reduce((sum, file) => sum + file.byteSize, 0);

@@ -9,7 +9,7 @@ Feature branch: `feature/resources-backend`, based on `GSpace-production`. Pull 
 - Editable fields: category, resource type, condition, branch, location, serial number, notes, warranty, optional purchase metadata and category-specific custom attributes.
 - Category definitions can be created/edited by authorized central administrators. Seeded standard categories include Laptop, Monitor, Mobile Device, Tablet, Printer, Network, POS Device and Other.
 - Bulk Create supports **1–100 identical assets**, created atomically in PostgreSQL with permanent unique Asset IDs and audited actions. Spreadsheet import and template download have been deliberately removed from the MVP.
-- Up to four attachments on *initial* resource creation: PDF, JPEG, PNG, WebP, CSV, TXT, DOCX or XLSX, maximum 2 MiB per file and 6 MiB total. Actual bytes are stored in PostgreSQL `BYTEA`, and downloads require authentication and branch authorization. Direct additional upload after registration is not yet implemented.
+- Documents can be uploaded during resource creation and added or deleted **at any later time** from either Resources → Details → Documents or Edit resource → Documents. Both existing-resource surfaces reuse the same shared document manager and authenticated API. PDF, JPEG, PNG, WebP, CSV, TXT, DOCX, XLSX are permitted; maximum 2 MiB per file, 4 files / 6 MiB per upload, 20 stored documents / 20 MiB combined per asset. All bytes remain in PostgreSQL `BYTEA`, not public storage; downloads are protected by authentication and branch scope.
 - Resource-specific immutable audit events record created/updated/deleted actions and actor. Security audit also records each write.
 - Central administrators can delete only unused `AVAILABLE` or `RETIRED` resources. Audit events remain after a deletion.
 - Status transitions tied to assignments, transfers and maintenance are deliberately **not editable** in Resources; those states belong to the later workflow modules.
@@ -32,6 +32,15 @@ Successful operations and transient errors use the global `ToastProvider` / `use
 
 The Resource Details drawer separates General information, Custom specifications and Purchase information using consistent section spacing and light dividers. Its footer keeps Close on the left, and Delete unused beside Edit resource on the right. Documents and Audit timeline no longer repeat their tab titles inside the panels.
 
+## Document lifecycle and audit
+
+Documents can be added and removed independently of Resource Edit, including for assigned or in-maintenance resources. **No Resource PATCH is required** to upload an invoice after registration. This does not bypass Resource field-validation requirements because document changes do not alter other resource fields.
+
+- **Upload:** authorized `assets.edit` users only, within their permitted branch; one atomic transaction saves 1–4 files, enforces total asset storage limits, updates asset timestamp and records one `DOCUMENT_ADDED` audit entry per file plus `RESOURCE_DOCUMENTS_ADDED` in Security Audit.
+- **Delete:** users with `assets.edit` confirm removal from the shared UI; a transaction deletes the selected binary record, writes `DOCUMENT_DELETED` to the resource's durable audit history and `RESOURCE_DOCUMENT_DELETED` to Security Audit. The file itself is irreversibly removed while its file name/ID metadata persists in audit.
+- **Download:** `assets.view` and branch scope; binary responses are attachment-only with content sniffing disabled. Audited document create/delete operations are visible from the asset's Audit Timeline.
+- **UX:** Resource Details → Documents and Edit resource → Documents share one component and update the file list immediately after successful mutation. In Edit, document operations save immediately, independently of other unsaved form inputs. All actions use the common Toast notification system.
+
 ## API
 
 All endpoints are under `/api/v1/resources`, use an authenticated session and an `assets.view` grant:
@@ -43,6 +52,8 @@ All endpoints are under `/api/v1/resources`, use an authenticated session and an
 | GET | `/:resourceId` | Resource details |
 | GET | `/:resourceId/audit` | Resource-specific audit history |
 | GET | `/:resourceId/documents/:documentId` | Secure authenticated document download |
+| POST | `/:resourceId/documents` | Add 1–4 files to an existing resource; requires `assets.edit` |
+| DELETE | `/:resourceId/documents/:documentId` | Confirmed deletion of one document; requires `assets.edit` |
 | POST | `/` | Create resource, with optional documents |
 | PATCH | `/:resourceId` | Update an editable resource |
 | DELETE | `/:resourceId` | Delete unused asset (central admins only) |
@@ -82,5 +93,5 @@ GitHub Actions runs Prisma migrations, admin bootstrap, API/Frontend TypeScript 
 ## Explicitly deferred
 
 - Real Assignments, Transfers, Inventory, Maintenance and approval workflow transitions; their tabs intentionally show no fictional events.
-- Full bundle membership linking, depreciation and GEL currency conversion, extra attachment upload after resource creation, pagination beyond the first 500 assets, and dedicated financial reporting.
+- Full bundle membership linking, depreciation and GEL currency conversion, pagination beyond the first 500 assets, and dedicated financial reporting.
 - Public production readiness requires independent security and operational review, safe backups and deployment checks.
