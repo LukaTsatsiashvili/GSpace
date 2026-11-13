@@ -18,3 +18,4 @@
 - Implement and test new features on a dedicated feature branch based on `GSpace-production`.
 - Do not merge into `GSpace-production` before the user's explicit approval.
 - UI preview data and actions must not claim persistence or upload files until an authenticated API is implemented.
+- Every transient application notification (success, error, warning, info) must use the shared `useToast` API in `apps/web/src/components/toast.tsx`. Do not introduce new full-width or module-specific success banners. Keep field validation errors inline, and preserve explicit modal confirmations where necessary.

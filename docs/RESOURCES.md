@@ -16,6 +16,22 @@ Feature branch: `feature/resources-backend`, based on `GSpace-production`. Pull 
 - Financial values are returned only to `finance.view` users. Editors without `finance.edit` cannot change or erase them.
 - A permission-checked, audited CSV export serves selected resource rows (maximum 500), with spreadsheet-formula escaping.
 
+## CSV template and import
+
+1. Open **Resources → Bulk create → CSV spreadsheet import**.
+2. Choose **Download template**. The CSV is generated in the browser from the authenticated `/catalog` response; no fabricated branches or categories are written.
+3. The file includes required columns `Name`, `Category`, `Branch`, `Condition`, optional asset details, permitted Finance columns, and a `custom.<fieldKey>` column for every currently configured category-specific field.
+4. It starts with one sample row containing a **real active category and branch**. Complete the empty `Name` and all required custom fields for the selected category, or duplicate the row for additional assets.
+5. In Excel, save back to **CSV UTF-8 (comma-delimited)**, then upload the same file. A batch accepts 1–100 records; all rows are validated on the backend before creation.
+
+Template generation and parsing share a pure tested module. The CSV parser supports quoted values, commas, Georgian characters and protected formula-prefixed category/branch names. Exported records and uploaded templates are different features: resource export remains permission-controlled and audited.
+
+## Shared notifications and Resources details UI
+
+Successful operations and transient errors use the global `ToastProvider` / `useToast` component, including Administration. Toasts appear in the top-right, support manual dismissal, and auto-hide after a duration based on severity. Form field validation stays with the form instead of becoming a transient toast.
+
+The Resource Details drawer separates General information, Custom specifications and Purchase information using consistent section spacing and light dividers. Its footer keeps Close on the left, and Delete unused beside Edit resource on the right. Documents and Audit timeline no longer repeat their tab titles inside the panels.
+
 ## API
 
 All endpoints are under `/api/v1/resources`, use an authenticated session and an `assets.view` grant:
@@ -62,7 +78,7 @@ npm run dev
 
 The migration retains existing Resources and initializes the sequence using the highest existing `AST-...` code. It also seeds standard categories. Back up the database before applying migrations to any shared or production database.
 
-GitHub Actions runs Prisma migrations, admin bootstrap, API/Frontend TypeScript checks, builds and integration tests against a disposable PostgreSQL 17 instance.
+GitHub Actions runs Prisma migrations, admin bootstrap, API/Frontend TypeScript checks, builds and integration tests against a disposable PostgreSQL 17 instance. It also runs `npm run test:web-csv` to verify generated-template/import compatibility.
 
 ## Explicitly deferred
 
