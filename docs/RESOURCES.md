@@ -8,7 +8,7 @@ Feature branch: `feature/resources-backend`, based on `GSpace-production`. Pull 
 - Add Resource wizard writes a real record and returns a unique permanent `AST-00001`-style Asset ID. Resource creation is limited to central administrators with `assets.create`.
 - Editable fields: category, resource type, condition, branch, location, serial number, notes, warranty, optional purchase metadata and category-specific custom attributes.
 - Category definitions can be created/edited by authorized central administrators. Seeded standard categories include Laptop, Monitor, Mobile Device, Tablet, Printer, Network, POS Device and Other.
-- Bulk Create supports 1–100 identical assets or a CSV import of 1–100 varied assets, validated transactionally on the server. **Direct XLSX upload is not supported**; export Excel as comma-delimited CSV. Each batch receives sequential unique IDs and an audit entry for every resource.
+- Bulk Create supports **1–100 identical assets**, created atomically in PostgreSQL with permanent unique Asset IDs and audited actions. Spreadsheet import and template download have been deliberately removed from the MVP.
 - Up to four attachments on *initial* resource creation: PDF, JPEG, PNG, WebP, CSV, TXT, DOCX or XLSX, maximum 2 MiB per file and 6 MiB total. Actual bytes are stored in PostgreSQL `BYTEA`, and downloads require authentication and branch authorization. Direct additional upload after registration is not yet implemented.
 - Resource-specific immutable audit events record created/updated/deleted actions and actor. Security audit also records each write.
 - Central administrators can delete only unused `AVAILABLE` or `RETIRED` resources. Audit events remain after a deletion.
@@ -16,18 +16,15 @@ Feature branch: `feature/resources-backend`, based on `GSpace-production`. Pull 
 - Financial values are returned only to `finance.view` users. Editors without `finance.edit` cannot change or erase them.
 - A permission-checked, audited CSV export serves selected resource rows (maximum 500), with spreadsheet-formula escaping.
 
-## Hybrid CSV template and import
+## Identical-item Bulk Create and deferred Custom Fields
 
-From **Resources → Bulk Create → CSV spreadsheet import**, choose a template category:
+**Resources → Bulk create** now supports only **Multiple identical items**. An authorized administrator selects the shared asset name, category, active branch, condition and quantity (1–100), reviews the batch and registers each asset with a unique, permanent Asset ID in one transaction. There is no CSV upload or template, and the old CSV import API is removed.
 
-- **Universal template (default):** downloads a completely empty UTF-8 CSV containing only standard field headers. It supports multiple categories in the same import, provided each row meets its selected category's validation rules. It contains **no Custom Fields** and no sample rows.
-- **Category template:** select an active category from PostgreSQL, then download a completely empty CSV containing standard headers plus **only that category's** Custom Field columns (each prefixed \`custom.\`). It does not pre-fill the Category or Branch value. Users fill those columns themselves.
+A category can have required Custom Fields. **Bulk Create deliberately permits those fields to be blank at registration.** For example, an administrator can bulk-register five laptops and later enter each laptop's specific RAM, storage or CPU in **Resource details → Edit resource**. The UI identifies fields awaiting completion. Individual Create and Edit operations still require those fields before saving, so the exception applies **only to identical-item bulk registration**.
 
-Both variants include optional Finance columns only when the user has Finance editing permission. The backend still validates every row: required Custom Fields must be supplied even in a universal import. For a category with required fields, use its category template (or register the resource through Add Resource). The importer shows a category-template guidance message for missing required values. **Validation is never bypassed or deferred to Edit Resource.**
+The usual validations for category, branch, quantity, condition, allowed Custom Field keys, permissions and financial values remain active. Once a resource is edited, required category fields must be complete.
 
-To import: open the downloaded file in Excel, enter one or more asset rows with exact active Category and Branch names, and save as CSV UTF-8 (comma-delimited) before uploading. A batch supports 1–100 rows and receives new permanent Asset IDs after confirmation. There are no fabricated catalog values or example records in either template.
-
-The frontend CSV template generator and parser share a pure module and include automated checks for blank templates, dynamic custom headers, permissions, required fields, Unicode names, and multi-category imports.
+**CSV Export is retained**: exporting existing assets remains a separate authorized, audited function.
 
 ## Shared notifications and Resources details UI
 
@@ -50,7 +47,6 @@ All endpoints are under `/api/v1/resources`, use an authenticated session and an
 | PATCH | `/:resourceId` | Update an editable resource |
 | DELETE | `/:resourceId` | Delete unused asset (central admins only) |
 | POST | `/bulk` | Create identical resources (1–100) |
-| POST | `/bulk/import` | Create individually validated resources (1–100) |
 | POST | `/export` | Audited CSV export requiring `reports.export` |
 | POST | `/categories` | Create a category and custom definitions |
 | PATCH | `/categories/:categoryId` | Modify category and definitions |
@@ -81,10 +77,10 @@ npm run dev
 
 The migration retains existing Resources and initializes the sequence using the highest existing `AST-...` code. It also seeds standard categories. Back up the database before applying migrations to any shared or production database.
 
-GitHub Actions runs Prisma migrations, admin bootstrap, API/Frontend TypeScript checks, builds and integration tests against a disposable PostgreSQL 17 instance. It also runs `npm run test:web-csv` to verify generated-template/import compatibility.
+GitHub Actions runs Prisma migrations, admin bootstrap, API/Frontend TypeScript checks, builds and integration tests against disposable PostgreSQL 17. Coverage includes registering a bulk batch with incomplete required Custom Fields and finishing those fields through Edit.
 
 ## Explicitly deferred
 
 - Real Assignments, Transfers, Inventory, Maintenance and approval workflow transitions; their tabs intentionally show no fictional events.
-- Full bundle membership linking, depreciation and GEL currency conversion, extra attachment upload after resource creation, direct XLSX import, pagination beyond the first 500 assets, and dedicated financial reporting.
+- Full bundle membership linking, depreciation and GEL currency conversion, extra attachment upload after resource creation, pagination beyond the first 500 assets, and dedicated financial reporting.
 - Public production readiness requires independent security and operational review, safe backups and deployment checks.

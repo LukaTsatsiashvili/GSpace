@@ -45,4 +45,3 @@ jobs:
       - run: npm run typecheck
       - run: npm run build
       - run: npm run test -w @gspace/api
-      - run: npm run test:web-csv

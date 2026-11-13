@@ -3,15 +3,21 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "workspaces": ["apps/*"],
+  "workspaces": [
+    "apps/*"
+  ],
   "scripts": {
     "dev": "concurrently -k -n api,web -c cyan,green \"npm run dev -w @gspace/api\" \"npm run dev -w @gspace/web\"",
     "build": "npm run build -w @gspace/api && npm run build -w @gspace/web",
     "typecheck": "npm run typecheck -w @gspace/api && npm run typecheck -w @gspace/web",
     "db:generate": "npm run db:generate -w @gspace/api",
-    "db:migrate": "npm run db:migrate -w @gspace/api",
-    "test:web-csv": "node --import tsx --test apps/web/tests/resource-csv-template.test.ts"
+    "db:migrate": "npm run db:migrate -w @gspace/api"
   },
-  "devDependencies": {"concurrently": "^9.2.1", "typescript": "^5.8.3"},
-  "engines": {"node": ">=22"}
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "typescript": "^5.8.3"
+  },
+  "engines": {
+    "node": ">=22"
+  }
 }
