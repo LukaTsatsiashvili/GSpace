@@ -230,6 +230,31 @@ router.get('/:assignmentId', run(async (req, res) => {
   res.json({ assignment: serialize(row) });
 }));
 
+// Attachments are private and may only be downloaded by the recipient or
+// an authorized branch manager. Never expose raw photo content in list APIs.
+router.get('/:assignmentId/items/:itemId/evidence', run(async (req, res) => {
+  const actor = principal(res);
+  const assignment = await db.assignment.findUnique({
+    where: { id: req.params.assignmentId },
+    select: { branchId: true, recipientId: true }
+  });
+  if (!assignment || !canSee(actor, assignment)) {
+    fail(res, 404, 'NOT_FOUND', 'Assignment not found'); return;
+  }
+  const item = await db.assignmentItem.findFirst({
+    where: { id: req.params.itemId, assignmentId: req.params.assignmentId },
+    include: { evidence: true }
+  });
+  if (!item?.evidence) { fail(res, 404, 'NOT_FOUND', 'Evidence not found'); return; }
+  res.setHeader('Cache-Control', 'private, no-store');
+  res.setHeader('Content-Type', item.evidence.mimeType);
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
+  res.setHeader('Content-Disposition', 'attachment; filename="assignment-evidence"; filename*=UTF-8\'\'' +
+    encodeURIComponent(item.evidence.filename));
+  res.send(Buffer.from(item.evidence.content));
+}));
+
 router.post('/', run(async (req, res) => {
   const parsed = assignmentInput.safeParse(req.body);
   if (invalidPayload(res, parsed)) return;
