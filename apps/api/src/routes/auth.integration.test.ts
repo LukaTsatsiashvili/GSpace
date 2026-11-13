@@ -522,6 +522,28 @@ test('session login, CSRF, RBAC directory read and logout', { skip: !process.env
     const assignmentId = (await createdAssignment.json() as { id: string }).id;
     const item = await db.assignmentItem.findFirstOrThrow({ where: { assignmentId } });
     assert.equal((await db.resource.findUniqueOrThrow({ where: { id: incompleteResource.id } })).status, 'ASSIGNED');
+    // Resources must reflect the recipient immediately, without inventing acceptance.
+    const assignedResource = await fetch(base + '/api/v1/resources/' + incompleteResource.id,
+      { headers: { cookie: both } });
+    assert.equal(assignedResource.status, 200);
+    const assignee = (await assignedResource.json() as {
+      resource: { assignedTo: { userId: string; userName: string; itemStatus: string } }
+    }).resource.assignedTo;
+    assert.equal(assignee.userId, employee.id);
+    assert.equal(assignee.itemStatus, 'PENDING');
+    const assignedList = await fetch(base + '/api/v1/resources', { headers: { cookie: both } });
+    const assignedListData = await assignedList.json() as {
+      resources: { id: string; assignedTo: { userId: string } | null }[]
+    };
+    assert.equal(assignedListData.resources.find(resource => resource.id === incompleteResource.id)?.assignedTo?.userId, employee.id);
+    const earlyHistory = await fetch(base + '/api/v1/resources/' + incompleteResource.id + '/assignments',
+      { headers: { cookie: both } });
+    assert.equal(earlyHistory.status, 200);
+    const earlyHistoryData = await earlyHistory.json() as {
+      current: { userId: string }; assignments: { assignmentCode: string; status: string }[]
+    };
+    assert.equal(earlyHistoryData.current.userId, employee.id);
+    assert.equal(earlyHistoryData.assignments[0]?.status, 'PENDING');
     assert.equal((await assignmentWrite('/', both, {
       recipientId: employee.id, resourceIds: [incompleteResource.id], dueAt: null, notes: ''
     })).status, 409);
@@ -552,6 +574,13 @@ test('session login, CSRF, RBAC directory read and logout', { skip: !process.env
       items: [{ itemId: item.id, condition: 'Good' }]
     })).status, 200);
     assert.equal((await db.resource.findUniqueOrThrow({ where: { id: incompleteResource.id } })).status, 'AVAILABLE');
+    const returnedHistory = await fetch(base + '/api/v1/resources/' + incompleteResource.id + '/assignments',
+      { headers: { cookie: both } });
+    const returnedResult = await returnedHistory.json() as {
+      current: null | { userId: string }; assignments: { status: string }[]
+    };
+    assert.equal(returnedResult.current, null);
+    assert.equal(returnedResult.assignments[0]?.status, 'RETURNED');
     assert.equal((await resourceApi('/' + incompleteResource.id, 'DELETE', {})).status, 409);
     const completed = await fetch(base + '/api/v1/assignments/' + assignmentId,
       { headers: { cookie: both } });
@@ -574,6 +603,13 @@ test('session login, CSRF, RBAC directory read and logout', { skip: !process.env
     assert.equal(firstTransfer.status, 201);
     const transferId = (await firstTransfer.json() as { id: string }).id;
     assert.equal((await db.assignmentItem.findUniqueOrThrow({ where: { id: originalItem.id } })).status, 'TRANSFER_PENDING');
+    const transferPendingResource = await fetch(base + '/api/v1/resources/' + incompleteResource.id,
+      { headers: { cookie: both } });
+    const transferPendingOwner = (await transferPendingResource.json() as {
+      resource: { assignedTo: { userId: string; pendingRecipientName: string | null } }
+    }).resource.assignedTo;
+    assert.equal(transferPendingOwner.userId, employee.id);
+    assert.equal(transferPendingOwner.pendingRecipientName, adminIdentity.fullName);
     assert.equal((await fetch(base + '/api/v1/assignments/' + transferId,
       { headers: { cookie: employeeCookies } })).status, 200);
     assert.equal((await assignmentWrite('/' + transferId + '/transfers/cancel', employeeCookies, {})).status, 200);
@@ -589,6 +625,13 @@ test('session login, CSRF, RBAC directory read and logout', { skip: !process.env
       decisions: [{ itemId: nextItem.id, decision: 'ACCEPT', notes: '' }]
     })).status, 200);
     assert.equal((await db.assignmentItem.findUniqueOrThrow({ where: { id: originalItem.id } })).status, 'TRANSFERRED');
+    const acceptedTransferResource = await fetch(base + '/api/v1/resources/' + incompleteResource.id,
+      { headers: { cookie: both } });
+    const acceptedOwner = (await acceptedTransferResource.json() as {
+      resource: { assignedTo: { userId: string; itemStatus: string } }
+    }).resource.assignedTo;
+    assert.equal(acceptedOwner.userId, adminIdentity.id);
+    assert.equal(acceptedOwner.itemStatus, 'ACCEPTED');
     assert.equal((await assignmentWrite('/' + secondTransferId + '/returns/request', both, {
       itemIds: [nextItem.id]
     })).status, 200);
