@@ -258,7 +258,8 @@ function AssignmentDrawer({ assignment, lookups, userId, close, done }: {
   const canVerify = canManage && assignment.assets.some(item => item.receipt === 'RETURN_REQUESTED');
   const canTransfer = (canManage || assignment.recipientId === userId) && assignment.assets.some(item => item.receipt === 'ACCEPTED');
   const canCancel = assignment.kind === 'EMPLOYEE_TRANSFER' && assignment.assets.every(item =>
-    ['PENDING', 'ISSUE_REPORTED'].includes(item.receipt)) && (canManage || assignment.recipientId === userId);
+    ['PENDING', 'ISSUE_REPORTED'].includes(item.receipt)) && (canManage || assignment.recipientId === userId ||
+      assignment.assets.some(item => item.sourceRecipientId === userId));
   useDialogEscape(() => { if (action) setAction(null); else close(); });
   return <div className="as-overlay as-right-overlay" onMouseDown={close}>
     <aside className="as-drawer" role="dialog" aria-modal="true" aria-label={'Assignment ' + assignment.code} onMouseDown={e => e.stopPropagation()}>
