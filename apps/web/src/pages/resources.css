@@ -104,3 +104,31 @@
 .rs-required-summary strong{font-size:12px;font-weight:800}
 .rs-required-summary p{font-size:11px;color:var(--muted);line-height:1.65;margin:6px 0 0}
 .rs-required-missing{color:var(--status-warning-fg);font-weight:700}
+
+/* Current custody and asset-level assignment history (same global GSpace theme). */
+.rs-assignee-cell{display:flex;flex-direction:column;gap:4px;min-width:0}
+.rs-assignee-cell strong{color:var(--text);font-size:11px;font-weight:800;line-height:1.4;overflow-wrap:anywhere}
+.rs-assignee-cell small{color:var(--muted);font-size:10px;line-height:1.4}
+.rs-card-assignee{margin-top:12px;font-size:11px;color:var(--text);font-weight:750}
+.rs-card-assignee small{display:block;margin-top:4px;color:var(--muted);font-size:10px;font-weight:500}
+.rs-assignment-panel{min-width:0}
+.rs-assignment-current{padding:16px;border:1px solid var(--border);background:var(--surface2);border-radius:10px}
+.rs-assignment-current>strong{display:block;font-size:13px;font-weight:800;color:var(--text)}
+.rs-assignment-current>span{display:block;margin-top:7px;font-size:11px;color:var(--muted);line-height:1.5}
+.rs-assignment-current .rs-detail-fields{margin-top:16px}
+.rs-assignment-history{display:grid;gap:12px}
+.rs-assignment-entry{border:1px solid var(--border);border-radius:10px;padding:16px;min-width:0;background:var(--surface)}
+.rs-assignment-entry-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:18px}
+.rs-assignment-entry-head>div strong{display:block;font-size:12px;color:var(--text);font-weight:800}
+.rs-assignment-entry-head>div span{display:block;font-size:10px;color:var(--muted);margin-top:5px}
+.rs-assignment-status{display:inline-flex;border-radius:6px;padding:6px 8px;font-size:10px;font-weight:750;background:var(--status-neutral-bg);color:var(--status-neutral-fg)}
+.rs-assignment-pending,.rs-assignment-issue_reported{background:var(--status-warning-bg);color:var(--status-warning-fg)}
+.rs-assignment-accepted{background:var(--status-success-bg);color:var(--status-success-fg)}
+.rs-assignment-return_requested,.rs-assignment-transfer_pending{background:var(--status-blue-bg);color:var(--status-blue-fg)}
+.rs-assignment-entry .rs-detail-fields{row-gap:15px;column-gap:18px}
+.rs-assignment-note{margin:15px 0 0;color:var(--text);font-size:11px;line-height:1.6;overflow-wrap:anywhere}
+.rs-assignment-evidence{margin:12px 0 0;color:var(--muted);font-size:10px}
+.rs-assignment-events{border-top:1px solid var(--border);margin:16px 0 0;padding:14px 0 0 17px;display:grid;gap:12px}
+.rs-assignment-events li{padding-left:2px}
+.rs-assignment-events strong{display:block;font-size:10px;color:var(--text)}
+.rs-assignment-events span{display:block;margin-top:4px;color:var(--muted);font-size:10px}
