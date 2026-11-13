@@ -6,7 +6,7 @@ export type AssignmentStatus =
   'Return requested' | 'Transfer pending' | 'Completed' | 'Cancelled';
 export type AssignmentAsset = {
   itemId: string; resourceId: string; id: string; name: string; condition: string;
-  receipt: ItemStatus; sourceItemId: string | null;
+  receipt: ItemStatus; sourceItemId: string | null; sourceRecipientId: string | null;
   receiptNotes: string; acceptedAt: string | null; returnedAt: string | null;
   returnCondition: string | null;
   evidence: { filename: string; mimeType: string; byteSize: number } | null;
