@@ -167,6 +167,8 @@ function handleError(err: unknown, res: Response) {
     FINANCE_FORBIDDEN: [403, 'Finance editing permission is required for purchase details'],
     INVALID_DOCUMENT: [400, 'File type, filename or contents are invalid'],
     DOCUMENT_TOO_LARGE: [413, 'Attachments exceed the permitted size'],
+    DOCUMENT_LIMIT: [409, 'A resource may hold at most 20 documents (20 MB combined)'],
+    DOCUMENT_NOT_FOUND: [404, 'Document not found'],
     NOT_FOUND: [404, 'Resource not found'],
     LIFECYCLE_LOCKED: [409, 'Assignment, transfer or maintenance status cannot be edited directly'],
     INVALID_STATE: [409, 'Only available or retired resources can be changed in this module'],
@@ -301,6 +303,116 @@ router.get('/:resourceId/documents/:documentId', run(async (req, res) => {
   res.setHeader('Content-Disposition', 'attachment; filename="document"; filename*=UTF-8\'\'' + encodeURIComponent(file.filename));
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.send(Buffer.from(file.content));
+}));
+
+/**
+ * Documents have their own lifecycle. Do not force a full Resource PATCH:
+ * attaching a late invoice must not require filling unrelated custom fields
+ * or changing assignment / maintenance state.
+ */
+const documentBatch = z.object({
+  documents: z.array(documentInput).min(1).max(4)
+}).strict();
+const maxDocumentsPerResource = 20;
+const maxDocumentBytesPerResource = 20 * 1024 * 1024;
+
+function documentAuditMeta(file: {
+  id: string; filename: string; mimeType: string; byteSize: number
+}) {
+  return { id: file.id, filename: file.filename, mimeType: file.mimeType, byteSize: file.byteSize };
+}
+
+router.post('/:resourceId/documents', allowEdit, run(async (req, res) => {
+  const parsed = documentBatch.safeParse(req.body);
+  if (!parsed.success) {
+    fail(res, 400, 'INVALID_INPUT', 'Select 1–4 valid attachments'); return;
+  }
+  const actor = principal(res);
+  try {
+    const incoming = decodeDocuments(parsed.data.documents);
+    const updated = await withRetry(async tx => {
+      const resource = await tx.resource.findUnique({ where: { id: req.params.resourceId } });
+      if (!resource || !canAccessBranch(actor.roleKey, actor.branchId, resource.branchId)) {
+        throw Error('NOT_FOUND');
+      }
+      const size = await tx.resourceDocument.aggregate({
+        where: { resourceId: resource.id },
+        _count: { _all: true }, _sum: { byteSize: true }
+      });
+      if (size._count._all + incoming.length > maxDocumentsPerResource ||
+        (size._sum.byteSize ?? 0) + incoming.reduce((sum, file) => sum + file.content.length, 0) >
+          maxDocumentBytesPerResource) throw Error('DOCUMENT_LIMIT');
+
+      const added = [];
+      for (const file of incoming) {
+        added.push(await tx.resourceDocument.create({
+          data: {
+            resourceId: resource.id, filename: file.filename, mimeType: file.mimeType,
+            byteSize: file.content.length, content: Uint8Array.from(file.content)
+          },
+          select: { id: true, filename: true, mimeType: true, byteSize: true, createdAt: true }
+        }));
+      }
+      await tx.resource.update({
+        where: { id: resource.id }, data: { updatedAt: new Date() }
+      });
+      await tx.resourceAuditEvent.createMany({
+        data: added.map(file => ({
+          resourceId: resource.id, assetCode: resource.assetCode,
+          action: 'DOCUMENT_ADDED', actorId: actor.userId, actorName: actor.fullName,
+          after: { document: documentAuditMeta(file) }
+        }))
+      });
+      await tx.securityAuditEvent.create({
+        data: {
+          action: 'RESOURCE_DOCUMENTS_ADDED', success: true, actorUserId: actor.userId,
+          details: JSON.stringify({
+            resourceId: resource.id, assetCode: resource.assetCode,
+            documents: added.map(documentAuditMeta)
+          })
+        }
+      });
+      return tx.resource.findUniqueOrThrow({ where: { id: resource.id }, include });
+    });
+    res.status(201).json({ resource: serialize(updated, actor) });
+  } catch (error) { if (!handleError(error, res)) throw error; }
+}));
+
+router.delete('/:resourceId/documents/:documentId', allowEdit, run(async (req, res) => {
+  const actor = principal(res);
+  try {
+    const updated = await withRetry(async tx => {
+      const resource = await tx.resource.findUnique({ where: { id: req.params.resourceId } });
+      if (!resource || !canAccessBranch(actor.roleKey, actor.branchId, resource.branchId)) {
+        throw Error('NOT_FOUND');
+      }
+      const file = await tx.resourceDocument.findFirst({
+        where: { resourceId: resource.id, id: req.params.documentId },
+        select: { id: true, filename: true, mimeType: true, byteSize: true }
+      });
+      if (!file) throw Error('DOCUMENT_NOT_FOUND');
+      await tx.resourceDocument.delete({ where: { id: file.id } });
+      await tx.resource.update({
+        where: { id: resource.id }, data: { updatedAt: new Date() }
+      });
+      await tx.resourceAuditEvent.create({
+        data: {
+          resourceId: resource.id, assetCode: resource.assetCode,
+          action: 'DOCUMENT_DELETED', actorId: actor.userId, actorName: actor.fullName,
+          before: { document: documentAuditMeta(file) }
+        }
+      });
+      await tx.securityAuditEvent.create({
+        data: {
+          action: 'RESOURCE_DOCUMENT_DELETED', success: true, actorUserId: actor.userId,
+          details: JSON.stringify({ resourceId: resource.id, assetCode: resource.assetCode,
+            document: documentAuditMeta(file) })
+        }
+      });
+      return tx.resource.findUniqueOrThrow({ where: { id: resource.id }, include });
+    });
+    res.json({ resource: serialize(updated, actor) });
+  } catch (error) { if (!handleError(error, res)) throw error; }
 }));
 
 router.get('/:resourceId', run(async (req, res) => {
