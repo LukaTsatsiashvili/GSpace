@@ -59,6 +59,13 @@ export const resourceApi = {
     request<{ ok: boolean }>('/' + encodeURIComponent(id), { method: 'PATCH', body }),
   bulk: (body: { quantity: number; template: Omit<ResourcePayload, 'serialNumber'> }) =>
     request<{ count: number; firstCode: string; lastCode: string }>('/bulk', { method: 'POST', body }),
+  uploadDocuments: (id: string, documents: FilePayload[]) =>
+    request<{ resource: ResourceRecord }>('/' + encodeURIComponent(id) + '/documents', {
+      method: 'POST', body: { documents }
+    }),
+  deleteDocument: (id: string, documentId: string) =>
+    request<{ resource: ResourceRecord }>('/' + encodeURIComponent(id) +
+      '/documents/' + encodeURIComponent(documentId), { method: 'DELETE' }),
   audit: (id: string) => request<{ events: AuditEntry[] }>('/' + encodeURIComponent(id) + '/audit'),
   remove: (id: string) => request<void>('/' + encodeURIComponent(id), { method: 'DELETE' }),
   categoryCreate: (body: { name: string; definitions: CustomDefinition[] }) =>
