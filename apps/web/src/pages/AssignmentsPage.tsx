@@ -236,13 +236,14 @@ function WorkflowDialog({ action, assignment, lookups, close, done }: {
     </>}
     {action === 'cancel' ? <p className="as-receipt-hint">All unconfirmed items in this handover will be cancelled. This does not change the original custodian or free the resources.</p> :
       <section className="as-asset-picker"><div className="as-asset-title"><strong>Resources</strong><Badge>{chosen.length} selected</Badge></div>
-        <div className="as-asset-list">{availableItems.map(item => <label key={item.itemId} className={'as-asset-choice ' + (chosen.includes(item.itemId) ? 'chosen' : '')}>
-          <Checkbox checked={chosen.includes(item.itemId)} onChange={() => toggle(item.itemId)}/>
-          <span className="as-choice-text"><strong>{item.name}</strong><small>{item.id} · {item.receipt.replace(/_/g, ' ')}</small></span>
+        <div className="as-asset-list">{availableItems.map(item => <div key={item.itemId} className={'as-asset-choice ' + (chosen.includes(item.itemId) ? 'chosen' : '')}>
+          <Checkbox id={'as-item-' + item.itemId} checked={chosen.includes(item.itemId)} onChange={() => toggle(item.itemId)}/>
+          <label htmlFor={'as-item-' + item.itemId} className="as-choice-text">
+            <strong>{item.name}</strong><small>{item.id} · {item.receipt.replace(/_/g, ' ')}</small></label>
           {action === 'verify' && chosen.includes(item.itemId) &&
             <Select label={'Return condition of ' + item.name} value={conditionsOnReturn[item.itemId]}
               options={conditions} onChange={value => setConditions(prev => ({ ...prev, [item.itemId]: value }))}/>}
-        </label>)}</div></section>}
+        </div>)}</div></section>}
     {error && <p className="as-form-error" role="alert">{error}</p>}
   </Modal>;
 }
