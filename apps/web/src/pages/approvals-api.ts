@@ -33,7 +33,7 @@ export type ApprovalSubmission = {
   typeId: string; branchId: string; title: string; reason: string;
   amount: number | null; values: Record<string, string | string[]>;
 };
-async function responseError(response: Response) {
+async function responseError(response: Response): Promise<never> {
   const body = await response.json().catch(() => ({})) as { error?: { message?: string } };
   throw Error(body.error?.message || 'Request failed. Please try again.');
 }
