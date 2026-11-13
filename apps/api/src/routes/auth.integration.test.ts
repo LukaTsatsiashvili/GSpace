@@ -476,6 +476,41 @@ test('session login, CSRF, RBAC directory read and logout', { skip: !process.env
     const peers = await peerLookups.json() as { recipients: { id: string }[]; availableAssets: unknown[] };
     assert.ok(peers.recipients.some(p => p.id === adminIdentity.id));
     assert.equal(peers.availableAssets.length, 0);
+
+    // Regression: BranchManager has assignments.manage and a single-branch scope.
+    // A Branch lookup must filter by Branch.id, not Resource/User.branchId.
+    const scopedRole = await db.role.findUniqueOrThrow({ where: { key: 'BRANCH_MANAGER' } });
+    const scopedManager = await db.user.create({
+      data: {
+        email: 'test-assignment-branch-manager@example.test',
+        fullName: 'Assignment Branch Manager', active: true,
+        roleId: scopedRole.id, branchId: adminIdentity.branchId,
+        credential: { create: { passwordHash: await hashPassword(password) } }
+      }
+    });
+    const managerLogin = await fetch(base + '/api/v1/auth/login', {
+      method: 'POST',
+      headers: { cookie: csrfCookie, 'content-type': 'application/json', 'x-csrf-token': csrf.csrfToken },
+      body: JSON.stringify({ email: scopedManager.email, password })
+    });
+    assert.equal(managerLogin.status, 200);
+    const managerSessionCookie = managerLogin.headers.get('set-cookie')?.split(';')[0];
+    assert.ok(managerSessionCookie);
+    const managerCookies = csrfCookie + '; ' + managerSessionCookie;
+    const managerLookups = await fetch(base + '/api/v1/assignments/lookups', {
+      headers: { cookie: managerCookies }
+    });
+    assert.equal(managerLookups.status, 200);
+    const scopedLookups = await managerLookups.json() as {
+      canManage: boolean;
+      recipients: { branchId: string }[];
+      availableAssets: { branchId: string }[];
+      branches: { id: string }[]
+    };
+    assert.equal(scopedLookups.canManage, true);
+    assert.deepEqual(scopedLookups.branches.map(value => value.id), [adminIdentity.branchId]);
+    assert.ok(scopedLookups.recipients.every(value => value.branchId === adminIdentity.branchId));
+    assert.ok(scopedLookups.availableAssets.every(value => value.branchId === adminIdentity.branchId));
     const deniedIssue = await assignmentWrite('/', employeeCookies, {
       recipientId: employee.id, resourceIds: [incompleteResource.id], dueAt: null, notes: ''
     });
