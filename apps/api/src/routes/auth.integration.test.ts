@@ -828,7 +828,13 @@ test('session login, CSRF, RBAC directory read and logout', { skip: !process.env
       body: JSON.stringify({ branchId: adminIdentity.branchId, departmentId: null })
     });
     assert.equal(moveEmployeeBack.status, 200);
-    assert.equal((await approvalWrite('/', csrfCookie + '; ' + freshEmployeeCookie, makeApproval)).status, 201);
+    // Changing branch invalidates the previous login session; authenticate again.
+    const branchLogin = await loginWith('A1bcdef');
+    assert.equal(branchLogin.status, 200);
+    const branchSession = branchLogin.headers.get('set-cookie')?.split(';')[0];
+    assert.ok(branchSession);
+    const employeeApprovalCookies = csrfCookie + '; ' + branchSession;
+    assert.equal((await approvalWrite('/', employeeApprovalCookies, makeApproval)).status, 201);
     const createdApproval = await approvalWrite('/', both, makeApproval);
     assert.equal(createdApproval.status, 201);
     const approvalCode = (await createdApproval.json() as { code: string }).code;
@@ -837,7 +843,7 @@ test('session login, CSRF, RBAC directory read and logout', { skip: !process.env
     assert.equal((await approvalWrite('/' + approval.id + '/decision', both,
       { decision: 'APPROVED', comment: '' })).status, 403);
     assert.equal((await fetch(base + '/api/v1/approvals/' + approval.id,
-      { headers: { cookie: csrfCookie + '; ' + freshEmployeeCookie } })).status, 404);
+      { headers: { cookie: employeeApprovalCookies } })).status, 404);
     assert.equal((await approvalWrite('/' + approval.id + '/decision', managerCookies,
       { decision: 'APPROVED', comment: 'First approval' })).status, 200);
     const afterFirst = await db.approvalRequest.findUniqueOrThrow({ where: { id: approval.id } });
