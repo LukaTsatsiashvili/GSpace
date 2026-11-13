@@ -25,7 +25,7 @@ const evidenceInput = z.object({
 }).strict();
 const receiptInput = z.object({ decisions: z.array(z.object({
   itemId: id, decision: z.enum(['ACCEPT', 'REPORT_ISSUE']),
-  notes: z.string().trim().max(1000).default(''), evidence: evidenceInput.optional()
+  notes: z.string().trim().max(1000).default(''), damageReported: z.boolean().default(false), evidence: evidenceInput.optional()
 }).strict()).min(1).max(25) }).strict();
 const itemIdsInput = z.object({ itemIds: z.array(id).min(1).max(25) }).strict();
 const verifyInput = z.object({ items: z.array(z.object({
@@ -148,12 +148,12 @@ async function event(tx: Prisma.TransactionClient, assignmentId: string, actor: 
 async function resourceEvent(tx: Prisma.TransactionClient, resource: {
   id: string; assetCode: string; name: string; category: string; branchId: string;
   condition: string; status: ResourceStatus; location: string
-}, actor: Actor, action: string, nextStatus: ResourceStatus) {
+}, actor: Actor, action: string, nextStatus: ResourceStatus, nextCondition = resource.condition) {
   await tx.resourceAuditEvent.create({ data: {
     resourceId: resource.id, assetCode: resource.assetCode, action,
     actorId: actor.userId, actorName: actor.fullName,
     before: { status: resource.status, condition: resource.condition },
-    after: { status: nextStatus, condition: resource.condition }
+    after: { status: nextStatus, condition: nextCondition }
   } });
 }
 function evidenceFile(file?: z.infer<typeof evidenceInput>) {
@@ -286,7 +286,7 @@ router.post('/:assignmentId/receipt', run(async (req, res) => {
       for (const [i, d] of parsed.data.decisions.entries()) {
         const item = assignment.items.find(item => item.id === d.itemId);
         if (!item || item.status !== 'PENDING') throw Error('INVALID_ITEM');
-        if (item.conditionOnIssue === 'Damaged' && !files[i]) throw Error('EVIDENCE_REQUIRED');
+        if ((item.conditionOnIssue === 'Damaged' || d.damageReported) && !files[i]) throw Error('EVIDENCE_REQUIRED');
         const next: AssignmentItemStatus = d.decision === 'ACCEPT' ? 'ACCEPTED' : 'ISSUE_REPORTED';
         const result = await tx.assignmentItem.updateMany({
           where: { id: item.id, status: 'PENDING' },
@@ -300,7 +300,7 @@ router.post('/:assignmentId/receipt', run(async (req, res) => {
           });
           if (changed.count !== 1) throw Error('INVALID_ITEM');
         }
-        await event(tx, assignment.id, actor, next, item.id, { resourceId: item.resourceId });
+        await event(tx, assignment.id, actor, next, item.id, { resourceId: item.resourceId, damageReported: d.damageReported });
       }
     });
     res.json({ ok: true });
@@ -348,7 +348,7 @@ router.post('/:assignmentId/returns/verify', run(async (req, res) => {
         const resourceChanged = await tx.resource.updateMany({ where: { id: item.resourceId, status: 'ASSIGNED' },
           data: { status: 'AVAILABLE', condition: entry.condition } });
         if (resourceChanged.count !== 1) throw Error('INVALID_ITEM');
-        await resourceEvent(tx, item.resource, actor, 'ASSIGNMENT_RETURNED', 'AVAILABLE');
+        await resourceEvent(tx, item.resource, actor, 'ASSIGNMENT_RETURNED', 'AVAILABLE', entry.condition);
         await event(tx, assignment.id, actor, 'RETURN_VERIFIED', item.id,
           { resourceId: item.resourceId, condition: entry.condition });
       }
