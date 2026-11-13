@@ -11,7 +11,7 @@ const categories: Category[] = [
   { id: 'desk', name: 'Desk', definitions: [] }
 ];
 function columns(csv: string): string[] {
-  const header = csv.trimEnd().split('\r\n')[0];
+  const header = csv.trimEnd().split('\r\n')[0].replace(/^\uFEFF/, '');
   return header.split(',').map(s => s.slice(1, -1));
 }
 function fill(csv: string, changes: Record<string,string>): string {
