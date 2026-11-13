@@ -472,6 +472,10 @@ test('session login, CSRF, RBAC directory read and logout', { skip: !process.env
         body: JSON.stringify(body)
       });
     assert.equal((await fetch(base + '/api/v1/assignments')).status, 401);
+    const peerLookups = await fetch(base + '/api/v1/assignments/lookups', { headers: { cookie: employeeCookies } });
+    const peers = await peerLookups.json() as { recipients: { id: string }[]; availableAssets: unknown[] };
+    assert.ok(peers.recipients.some(p => p.id === adminIdentity.id));
+    assert.equal(peers.availableAssets.length, 0);
     const deniedIssue = await assignmentWrite('/', employeeCookies, {
       recipientId: employee.id, resourceIds: [incompleteResource.id], dueAt: null, notes: ''
     });
@@ -535,7 +539,9 @@ test('session login, CSRF, RBAC directory read and logout', { skip: !process.env
     assert.equal(firstTransfer.status, 201);
     const transferId = (await firstTransfer.json() as { id: string }).id;
     assert.equal((await db.assignmentItem.findUniqueOrThrow({ where: { id: originalItem.id } })).status, 'TRANSFER_PENDING');
-    assert.equal((await assignmentWrite('/' + transferId + '/transfers/cancel', both, {})).status, 200);
+    assert.equal((await fetch(base + '/api/v1/assignments/' + transferId,
+      { headers: { cookie: employeeCookies } })).status, 200);
+    assert.equal((await assignmentWrite('/' + transferId + '/transfers/cancel', employeeCookies, {})).status, 200);
     assert.equal((await db.assignmentItem.findUniqueOrThrow({ where: { id: originalItem.id } })).status, 'ACCEPTED');
     const secondTransfer = await beginTransfer();
     assert.equal(secondTransfer.status, 201);
