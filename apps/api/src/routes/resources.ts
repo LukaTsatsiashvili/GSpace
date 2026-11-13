@@ -122,7 +122,10 @@ function decodeDocuments(files: ResourceInput['documents']): Upload[] {
     return { filename: file.filename, mimeType: file.mimeType, content };
   });
 }
-async function validate(tx: Prisma.TransactionClient, values: ResourceInput, actor: AuthPrincipal) {
+async function validate(
+  tx: Prisma.TransactionClient, values: ResourceInput, actor: AuthPrincipal,
+  options: { allowMissingRequiredCustomFields?: boolean } = {}
+) {
   const branch = await tx.branch.findUnique({ where: { id: values.branchId } });
   if (!branch?.active) throw Error('INVALID_BRANCH');
   if (!canAccessBranch(actor.roleKey, actor.branchId, branch.id)) throw Error('INVALID_BRANCH');
@@ -132,7 +135,13 @@ async function validate(tx: Prisma.TransactionClient, values: ResourceInput, act
   if (!defs.success) throw Error('INVALID_CATEGORY');
   const keys = new Set(defs.data.map(f => f.key));
   for (const key of Object.keys(values.customFields)) if (!keys.has(key)) throw Error('INVALID_CUSTOM_FIELDS');
-  for (const field of defs.data) if (field.required && !values.customFields[field.key]?.trim()) throw Error('REQUIRED_CUSTOM_FIELD');
+  // Only the identical-item bulk workflow may register assets before required custom
+  // specifications are populated. Single creates and Edit still enforce them.
+  if (!options.allowMissingRequiredCustomFields) {
+    for (const field of defs.data) {
+      if (field.required && !values.customFields[field.key]?.trim()) throw Error('REQUIRED_CUSTOM_FIELD');
+    }
+  }
   if (!validFinancial(values) || validDate(values.warrantyEnd) === undefined ||
       validDate(values.purchaseDate) === undefined) throw Error('INVALID_VALUES');
   if (!actor.permissions.includes('finance.edit') && usesFinance(values)) throw Error('FINANCE_FORBIDDEN');
@@ -361,35 +370,6 @@ router.patch('/:resourceId', allowEdit, run(async (req, res) => {
 }));
 
 
-router.post('/bulk/import', allowCreate, run(async (req, res) => {
-  // CSV imports are parsed on the client, but all rows are revalidated server-side.
-  const parsed = z.object({ resources: z.array(input.omit({ documents: true })).min(1).max(100) })
-    .strict().safeParse(req.body);
-  if (!parsed.success) { fail(res, 400, 'INVALID_INPUT', 'Import 1–100 valid resource rows'); return; }
-  const actor = principal(res);
-  try {
-    const codes = await withRetry(async tx => {
-      for (const row of parsed.data.resources) await validate(tx, { ...row, documents: [] }, actor);
-      const generated = await reserveIds(tx, parsed.data.resources.length);
-      await tx.resource.createMany({ data: parsed.data.resources.map((row, i) =>
-        ({ ...createData({ ...row, documents: [] }), assetCode: generated[i] })) });
-      const created = await tx.resource.findMany({ where: { assetCode: { in: generated } } });
-      await tx.resourceAuditEvent.createMany({ data: created.map(row => ({
-        resourceId: row.id, assetCode: row.assetCode, action: 'CREATED',
-        actorId: actor.userId, actorName: actor.fullName, after: auditResource(row)
-      })) });
-      await tx.securityAuditEvent.create({ data: {
-        action: 'RESOURCE_CSV_IMPORTED', success: true, actorUserId: actor.userId,
-        details: JSON.stringify({
-          quantity: generated.length, first: generated[0], last: generated.at(-1)
-        })
-      } });
-      return generated;
-    });
-    res.status(201).json({ count: codes.length, firstCode: codes[0], lastCode: codes.at(-1) });
-  } catch (err) { if (!handleError(err, res)) throw err; }
-}));
-
 router.post('/bulk', allowCreate, run(async (req, res) => {
   const parsed = z.object({
     template: input.omit({ documents: true, serialNumber: true }),
@@ -400,7 +380,7 @@ router.post('/bulk', allowCreate, run(async (req, res) => {
   try {
     const result = await withRetry(async tx => {
       const values = { ...parsed.data.template, serialNumber: null, documents: [] };
-      await validate(tx, values, actor);
+      await validate(tx, values, actor, { allowMissingRequiredCustomFields: true });
       const codes = await reserveIds(tx, parsed.data.quantity);
       const records = codes.map(assetCode => ({ ...createData(values), assetCode }));
       await tx.resource.createMany({ data: records });

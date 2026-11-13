@@ -207,6 +207,12 @@ test('session login, CSRF, RBAC directory read and logout', { skip: !process.env
       body: JSON.stringify({ ...resourceTemplate, documents: [] })
     });
     assert.equal(forbiddenCreate.status, 403);
+    const forbiddenImport = await fetch(base + '/api/v1/resources/bulk/import', {
+      method: 'POST', headers: { cookie: both, 'content-type': 'application/json',
+        'x-csrf-token': csrf.csrfToken }, body: JSON.stringify({ resources: [] })
+    });
+    assert.equal(forbiddenImport.status, 404);
+
 
     const bulkTemplate = {
       ...resourceTemplate, name: 'Batch Laptop', serialNumber: undefined,
@@ -221,19 +227,6 @@ test('session login, CSRF, RBAC directory read and logout', { skip: !process.env
     assert.equal(bulkResult.count, 3);
     assert.notEqual(bulkResult.firstCode, createdAsset.assetCode);
 
-    const imported = await resourceApi('/bulk/import', 'POST', {
-      resources: [
-        { ...resourceTemplate, name: 'Imported Tablet', category: 'Tablet',
-          serialNumber: 'IMPORT-1', purchasePrice: null, purchaseDate: null,
-          supplier: '', usefulLifeMonths: null, residualValue: null, customFields: {} },
-        { ...resourceTemplate, name: 'Imported Monitor', category: 'Monitor',
-          serialNumber: 'IMPORT-2', purchasePrice: null, purchaseDate: null,
-          supplier: '', usefulLifeMonths: null, residualValue: null, customFields: {} }
-      ]
-    });
-    assert.equal(imported.status, 201);
-    assert.equal((await imported.json() as { count: number }).count, 2);
-
     const customCategory = await resourceApi('/categories', 'POST', {
       name: 'Test New Equipment', definitions: [
         { key: 'identification', label: 'Identification', required: true }
@@ -245,6 +238,49 @@ test('session login, CSRF, RBAC directory read and logout', { skip: !process.env
       ...resourceTemplate, category: 'Test New Equipment', customFields: {}, documents: []
     });
     assert.equal(missingCustom.status, 400);
+
+    // Identical-item Bulk Create intentionally accepts incomplete required Custom Fields;
+    // assets can be completed later through Edit Resource.
+    const incompleteBatch = await resourceApi('/bulk', 'POST', {
+      template: {
+        ...bulkTemplate, category: 'Test New Equipment', customFields: {},
+        location: 'Asset Storage'
+      },
+      quantity: 2
+    });
+    assert.equal(incompleteBatch.status, 201);
+    const incompleteBatchResult = await incompleteBatch.json() as {
+      count: number; firstCode: string; lastCode: string
+    };
+    assert.equal(incompleteBatchResult.count, 2);
+    const incompleteResource = await db.resource.findUniqueOrThrow({
+      where: { assetCode: incompleteBatchResult.firstCode }
+    });
+    assert.deepEqual(incompleteResource.customFields, {});
+    assert.equal(incompleteResource.category, 'Test New Equipment');
+    assert.equal(incompleteResource.status, 'AVAILABLE');
+
+    const stillRequiredOnEdit = await resourceApi('/' + incompleteResource.id, 'PATCH', {
+      ...resourceTemplate, name: 'Completed Later', category: 'Test New Equipment',
+      customFields: {}, status: 'AVAILABLE'
+    });
+    assert.equal(stillRequiredOnEdit.status, 400);
+    const filledLater = await resourceApi('/' + incompleteResource.id, 'PATCH', {
+      ...resourceTemplate, name: 'Completed Later', category: 'Test New Equipment',
+      customFields: { identification: 'COMPLETED-EDIT-1' }, status: 'AVAILABLE'
+    });
+    assert.equal(filledLater.status, 200);
+    assert.deepEqual((await db.resource.findUniqueOrThrow({
+      where: { id: incompleteResource.id }
+    })).customFields, { identification: 'COMPLETED-EDIT-1' });
+
+    // Missing required specs do not waive other field validation or branch security.
+    const invalidBulk = await resourceApi('/bulk', 'POST', {
+      template: { ...bulkTemplate, category: 'Test New Equipment',
+        customFields: {}, condition: 'Invalid condition' }, quantity: 2
+    });
+    assert.equal(invalidBulk.status, 400);
+
     const customResource = await resourceApi('/', 'POST', {
       ...resourceTemplate, name: 'Custom Equipment', category: 'Test New Equipment',
       customFields: { identification: 'TEST-RESOURCE-1' }, documents: []
