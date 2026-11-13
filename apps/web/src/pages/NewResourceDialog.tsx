@@ -7,6 +7,7 @@ import {
   type Branch, type Category, type ResourcePayload, type ResourceRecord,
   type ResourceCondition, type ResourceType
 } from './resource-api';
+import ResourceDocuments from './ResourceDocuments';
 import './new-resource.css';
 
 type FormData = {
@@ -57,9 +58,11 @@ function initialForm(branches: Branch[], categories: Category[], resource?: Reso
   };
 }
 
-export default function NewResourceDialog({ close, branches, categories, resource, saved }: {
+export default function NewResourceDialog({ close, branches, categories, resource, saved,
+  onDocumentsChange }: {
   close: () => void; branches: Branch[]; categories: Category[];
-  resource?: ResourceRecord | null; saved: (assetCode: string) => void
+  resource?: ResourceRecord | null; saved: (assetCode: string) => void;
+  onDocumentsChange?: (resource: ResourceRecord) => void
 }) {
   const { user } = useAuth();
   const canFinance = user.role.permissions.includes('finance.edit');
@@ -155,7 +158,8 @@ export default function NewResourceDialog({ close, branches, categories, resourc
   };
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !pending && !document.querySelector('.ui-select-options')) close();
+      if (event.key === 'Escape' && !pending && !document.querySelector('.ui-select-options') &&
+        !document.querySelector('.rd-document-confirm-shade')) close();
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
@@ -278,10 +282,9 @@ export default function NewResourceDialog({ close, branches, categories, resourc
               </div>)}</div> : <p className="nw-files-caption">No files selected. Attachments are optional.</p>}
             {files.some(file => !allowedFileTypes.includes(file.type)) &&
               <p className="nw-error" role="alert">Unsupported attachment type. Use PDF, image, CSV, text or Office OpenXML files.</p>}
-          </> : <p className="nw-files-caption">
-            {resource?.documents.length ?? 0} existing document(s). Additional uploads will be available as a follow-up;
-            editing currently preserves existing documents.
-          </p>}
+          </> : resource && <ResourceDocuments resource={resource} context="edit"
+            canManage={user.role.permissions.includes('assets.edit') && !pending}
+            onChanged={updated => onDocumentsChange?.(updated)}/>
           <Notice icon={<ShieldCheck size={18}/>}>
             Documents are stored in the database, not as public files. Downloads require authentication and branch access.
           </Notice>

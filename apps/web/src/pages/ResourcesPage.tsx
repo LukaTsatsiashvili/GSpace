@@ -7,10 +7,11 @@ import { Button, Card, PageHeader, Select, SearchInput } from '../components/ui'
 import { useAuth } from '../auth/AuthGate';
 import { useToast } from '../components/toast';
 import NewResourceDialog from './NewResourceDialog';
+import ResourceDocuments from './ResourceDocuments';
 import BulkResourceDialog from './BulkResourceDialog';
 import ResourceCategoriesDialog from './ResourceCategoriesDialog';
 import {
-  resourceApi, downloadDocument, exportResourceCsv, type ResourceRecord, type ResourceStatus,
+  resourceApi, exportResourceCsv, type ResourceRecord, type ResourceStatus,
   type ResourceSummary, type Category, type Branch, type AuditEntry
 } from './resource-api';
 import './resources.css';
@@ -49,10 +50,12 @@ function StatusPill({ status }: { status: ResourceStatus }) {
   return <span className={'rs-status ' + label.toLowerCase().replace(/\s+/g, '-')}>
     <span/>{label}</span>;
 }
-function ResourceDrawer({ resource, categories, close, canEdit, canDelete, onEdit, onRemoved }: {
+function ResourceDrawer({ resource, categories, close, canEdit, canDelete, onEdit, onRemoved,
+  onDocumentsChange }: {
   resource: ResourceRecord; categories: Category[];
   close: () => void; canEdit: boolean; canDelete: boolean;
-  onEdit: () => void; onRemoved: () => void
+  onEdit: () => void; onRemoved: () => void;
+  onDocumentsChange: (resource: ResourceRecord) => void
 }) {
   const [tab, setTab] = useState<Tab>('Overview');
   const [audit, setAudit] = useState<AuditEntry[]>([]);
@@ -60,7 +63,6 @@ function ResourceDrawer({ resource, categories, close, canEdit, canDelete, onEdi
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const toast = useToast();
   const Icon = iconFor(resource.category);
   const editable = resource.status === 'AVAILABLE' || resource.status === 'RETIRED';
   const definitions = categories.find(category => category.name === resource.category)?.definitions ?? [];
@@ -76,7 +78,8 @@ function ResourceDrawer({ resource, categories, close, canEdit, canDelete, onEdi
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !busy && !document.querySelector('.ui-select-options')) {
+      if (event.key === 'Escape' && !busy && !document.querySelector('.ui-select-options') &&
+        !document.querySelector('.rd-document-confirm-shade')) {
         if (confirmDelete) setConfirmDelete(false); else close();
       }
     };
@@ -92,7 +95,7 @@ function ResourceDrawer({ resource, categories, close, canEdit, canDelete, onEdi
       if (alive) setAuditError(err instanceof Error ? err.message : 'Audit timeline could not load.');
     });
     return () => { alive = false; };
-  }, [tab, resource.id]);
+  }, [tab, resource.id, resource.updatedAt]);
   async function remove() {
     if (busy) return;
     setBusy(true); setError('');
@@ -159,20 +162,15 @@ function ResourceDrawer({ resource, categories, close, canEdit, canDelete, onEdi
           </div>}
         </>}
         {tab === 'Documents' && <div className="rs-detail-section">
-          {resource.documents.length ? <div className="rs-live-documents">
-            {resource.documents.map(file => <div key={file.id}>
-              <div><strong>{file.filename}</strong><small>{Math.ceil(file.byteSize / 1024)} KB · {formatDate(file.createdAt)}</small></div>
-              <Button onClick={() => { void downloadDocument(resource.id, file).catch(err =>
-                toast.error(err instanceof Error ? err.message : 'Download failed.')); }}
-                icon={<ArrowDownToLine size={15}/>}>Download</Button>
-            </div>)}
-          </div> : <p className="rs-muted">No documents were uploaded for this resource.</p>}
+          <ResourceDocuments resource={resource} canManage={canEdit}
+            onChanged={onDocumentsChange}/>
         </div>}
         {tab === 'Audit timeline' && <div className="rs-detail-section">
           {auditError && <p className="rs-error" role="alert">{auditError}</p>}
           {audit.length ? <ol className="rs-live-audit">{audit.map(event => <li key={event.id}>
             <strong>{event.action === 'CREATED' ? 'Resource registered' : event.action === 'UPDATED' ?
-              'Resource updated' : event.action}</strong>
+              'Resource updated' : event.action === 'DOCUMENT_ADDED' ?
+              'Document added' : event.action === 'DOCUMENT_DELETED' ? 'Document deleted' : event.action}</strong>
             <span>{formatDate(event.createdAt)} · {event.actorName}</span>
           </li>)}</ol> : !auditError && <p className="rs-muted">No audit history to display.</p>}
         </div>}
@@ -352,11 +350,19 @@ export default function ResourcesPage() {
     {selected && <ResourceDrawer resource={selected} categories={categories} close={() => setSelected(null)}
       canEdit={canEdit} canDelete={canDelete}
       onEdit={() => { setEditing(selected); setSelected(null); }}
-      onRemoved={() => saved(selected.assetCode + ' deleted.')}/>}
+      onRemoved={() => saved(selected.assetCode + ' deleted.')}
+      onDocumentsChange={updated => {
+        setSelected(updated);
+        setResources(records => records.map(record => record.id === updated.id ? updated : record));
+      }}/>}
     {(adding || editing) && <NewResourceDialog key={editing?.id ?? 'new'} resource={editing}
       branches={branches} categories={categories}
       close={() => { setAdding(false); setEditing(null); }}
-      saved={code => saved(code + (editing ? ' updated.' : ' registered.'))}/>}
+      saved={code => saved(code + (editing ? ' updated.' : ' registered.'))}
+      onDocumentsChange={updated => {
+        setEditing(updated);
+        setResources(records => records.map(record => record.id === updated.id ? updated : record));
+      }}/>}
     {bulkOpen && <BulkResourceDialog branches={branches} categories={categories}
       close={() => setBulkOpen(false)} saved={saved}/>}
     {categoryOpen && <ResourceCategoriesDialog categories={categories}

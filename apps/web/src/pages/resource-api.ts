@@ -93,7 +93,14 @@ export async function asFilePayload(file: File): Promise<FilePayload> {
       const text = String(reader.result);
       const base64 = text.split(',')[1];
       if (!base64) { reject(Error('Invalid attachment ' + file.name)); return; }
-      resolve({ filename: file.name, mimeType: file.type, base64 });
+      const ext = file.name.toLowerCase().split('.').at(-1) ?? '';
+      const fallback: Record<string, string> = {
+        pdf: 'application/pdf', jpg: 'image/jpeg', jpeg: 'image/jpeg',
+        png: 'image/png', webp: 'image/webp', txt: 'text/plain', csv: 'text/csv',
+        docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      };
+      resolve({ filename: file.name, mimeType: file.type || fallback[ext] || '', base64 });
     };
     reader.readAsDataURL(file);
   });
