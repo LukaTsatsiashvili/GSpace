@@ -816,7 +816,12 @@ test('session login, CSRF, RBAC directory read and logout', { skip: !process.env
       { ...makeApproval, values: { options: ['Monitor'] } })).status, 400);
     assert.equal((await approvalWrite('/', both,
       { ...makeApproval, values: { justification: 'Need a monitor', options: ['Unknown'] } })).status, 400);
-    assert.equal((await approvalWrite('/', employeeCookies, makeApproval)).status, 201);
+    // Employee's earlier session was revoked during the password-change tests above.
+    const newEmployeeLogin = await loginWith('A1bcdef');
+    assert.equal(newEmployeeLogin.status, 200);
+    const freshEmployeeCookie = newEmployeeLogin.headers.get('set-cookie')?.split(';')[0];
+    assert.ok(freshEmployeeCookie);
+    assert.equal((await approvalWrite('/', csrfCookie + '; ' + freshEmployeeCookie, makeApproval)).status, 201);
     const createdApproval = await approvalWrite('/', both, makeApproval);
     assert.equal(createdApproval.status, 201);
     const approvalCode = (await createdApproval.json() as { code: string }).code;
