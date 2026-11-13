@@ -119,7 +119,7 @@ function TypeForm({ initial, lookups, close, saved }: {
   const [busy, setBusy] = useState(false);
   const choices = useMemo(() => [
     ...lookups.roles.map(r => ({ key: 'ROLE:' + r.id, title: 'Role · ' + r.name })),
-    ...lookups.users.map(u => ({ key: 'USER:' + u.id, title: 'User · ' + u.fullName }))
+    ...lookups.users.map(u => ({ key: 'USER:' + u.id, title: 'User · ' + u.fullName + ' (' + u.id.slice(0, 6) + ')' }))
   ], [lookups]);
   const updateField = (index: number, changed: Partial<ApprovalField>) =>
     setData(old => ({ ...old, fields: old.fields.map((f, i) => i === index ? { ...f, ...changed } : f) }));
@@ -204,9 +204,10 @@ function TypeForm({ initial, lookups, close, saved }: {
             onChange={value => changeTarget(index, j, value)}/>
           <Button onClick={() => updateStep(index, { targets: s.targets.filter((_, k) => k !== j) })}>Remove</Button>
         </div>)}
-        <Button disabled={!choices.length || s.targets.length >= 12} onClick={() => {
-          const first = choices[0]?.key.split(':');
-          if (first) updateStep(index, { targets: [...s.targets, { kind: first[0] as 'USER' | 'ROLE', id: first[1] }] });
+        <Button disabled={!choices.length || s.targets.length >= 12 || s.targets.length >= choices.length} onClick={() => {
+          const next = choices.find(c => !s.targets.some(t => c.key === t.kind + ':' + t.id));
+          const target = next?.key.split(':');
+          if (target) updateStep(index, { targets: [...s.targets, { kind: target[0] as 'USER' | 'ROLE', id: target[1] }] });
         }}>Add reviewer or role</Button>
       </div>)}
     </div>
@@ -219,8 +220,8 @@ function RequestDetails({ item, close, refresh }: { item: ApprovalRequestRecord;
   const [comment, setComment] = useState('');
   const [busy, setBusy] = useState(false);
   const [resubmitOpen, setResubmitOpen] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState(false);
   async function action(kind: 'decision' | 'cancel') {
-    if (kind === 'cancel' && !window.confirm('Cancel this request? The action cannot be undone.')) return;
     setBusy(true);
     try {
       if (kind === 'cancel') await approvalsApi.cancel(item.id);
@@ -232,7 +233,10 @@ function RequestDetails({ item, close, refresh }: { item: ApprovalRequestRecord;
   }
   return <><Modal wide title={item.title} description={item.code + ' · ' + item.type + ' · v' + item.version}
     close={close} footer={<><Button onClick={close}>Close</Button>
-      {item.canCancel && <Button disabled={busy} onClick={() => void action('cancel')}>Cancel request</Button>}
+      {item.canCancel && (!confirmCancel ? <Button disabled={busy} onClick={() => setConfirmCancel(true)}>Cancel request</Button> : <>
+        <Button disabled={busy} onClick={() => setConfirmCancel(false)}>Keep request</Button>
+        <Button variant="primary" disabled={busy} onClick={() => void action('cancel')}>Confirm cancellation</Button>
+      </>)}
       {item.canResubmit && <Button variant="primary" onClick={() => setResubmitOpen(true)}>Edit & resubmit</Button>}
     </>}>
     <div className="ap-live-summary"><div><span>Status</span><strong>{nice(item.status)}</strong></div>
@@ -251,6 +255,7 @@ function RequestDetails({ item, close, refresh }: { item: ApprovalRequestRecord;
         {item.reviews.filter(r => r.step === index).map(r =>
           <div key={r.id} className="ap-live-review"><span>{r.reviewer}</span>
             <span>{nice(r.status)}{r.comment && ' · ' + r.comment}</span></div>)}</div>)}</div>
+    {confirmCancel && <p className="ap-live-notice">Confirm cancellation to close this request permanently. The audit history will be retained.</p>}
     {item.canReview && <div className="ap-live-section"><h3>My decision</h3>
       <FieldRow label="Decision"><Select label="Approval decision" value={nice(decision)}
         options={['Approved','Rejected','Changes requested']}
