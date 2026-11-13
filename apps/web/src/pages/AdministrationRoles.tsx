@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import { Plus, ShieldCheck, X } from 'lucide-react';
 import { Button, Checkbox, Input, SearchInput, Textarea } from '../components/ui';
 import { useAuth } from '../auth/AuthGate';
-import AdministrationFeedback from './AdministrationFeedback';
+import { useToast } from '../components/toast';
 
 type RoleRecord = { id: string; code: string; name: string; description: string; active: boolean; protected: boolean; userCount: number; permissions: string[] };
 type PermissionRecord = { id: string; name: string; description: string };
@@ -132,8 +132,7 @@ export default function AdministrationRoles() {
   const [permissions, setPermissions] = useState<PermissionRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
-  const dismissNotice = useCallback(() => setNotice(''), []);
+  const toast = useToast();
   const [query, setQuery] = useState('');
   const [editor, setEditor] = useState<RoleRecord | null | undefined>(undefined);
   const load = useCallback(async () => {
@@ -160,7 +159,6 @@ export default function AdministrationRoles() {
       {canManage && <Button variant="primary" icon={<Plus size={16}/>} onClick={()=>setEditor(null)}>Create role</Button>}
     </div>
     {error && <div className="am-empty" role="alert">{error} <Button onClick={()=>void load()}>Retry</Button></div>}
-    {notice && <AdministrationFeedback message={notice} onDismiss={dismissNotice}/>}
     {loading ? <div className="am-empty">Loading roles from PostgreSQL...</div> :
       <div className="am-role-grid">
         {visible.map(role=><div className="am-role-card" key={role.id}>
@@ -179,6 +177,6 @@ export default function AdministrationRoles() {
     {!loading && !visible.length && <div className="am-empty">No roles match your search.</div>}
     <div className="am-table-footer">Role codes are immutable. Protected roles cannot be edited. Changes to permissions immediately revoke affected sessions.</div>
     {editor !== undefined && <Editor role={editor} permissions={permissions} canManage={canManage}
-      onClose={()=>setEditor(undefined)} onSaved={()=>{setEditor(undefined);setNotice('Role saved successfully.');void load();}}/>}
+      onClose={()=>setEditor(undefined)} onSaved={()=>{setEditor(undefined);toast.success('Role saved successfully.');void load();}}/>}
   </>;
 }

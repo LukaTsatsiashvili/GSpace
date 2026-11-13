@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type KeyboardEvent, type Rea
 import { ArrowLeftRight, Check, Copy, Plus, X } from 'lucide-react';
 import { Button, Input, SearchInput, Select, Textarea } from '../components/ui';
 import { useAuth } from '../auth/AuthGate';
-import AdministrationFeedback from './AdministrationFeedback';
+import { useToast } from '../components/toast';
 
 type Role = { id: string; key: string; name: string; protected: boolean };
 type Branch = { id: string; name: string };
@@ -270,8 +270,7 @@ export default function AdministrationUsers({ openCreate, closeCreate, onSummary
   const [resetting, setResetting] = useState<Account | null>(null);
   const [invite, setInvite] = useState<string | null>(null);
   const [createInternal, setCreateInternal] = useState(false);
-  const [notice, setNotice] = useState('');
-  const dismissNotice = useCallback(() => setNotice(''), []);
+  const toast = useToast();
   const { user: me } = useAuth();
 
   const load = useCallback(async () => {
@@ -300,7 +299,7 @@ export default function AdministrationUsers({ openCreate, closeCreate, onSummary
   function saved(activationPath: string | null) {
     setEditing(null); setCreateInternal(false); closeCreate(); setSelected(null); setResetting(null);
     if (activationPath) setInvite(activationPath);
-    else setNotice('Account updated successfully.');
+    else toast.success('Account updated successfully.');
     void load();
   }
   const isCreating = openCreate || createInternal;
@@ -320,7 +319,6 @@ export default function AdministrationUsers({ openCreate, closeCreate, onSummary
       <Button variant="primary" icon={<Plus size={16}/>} onClick={openNew}>Add user</Button>
     </div>
     {error && <div className="am-empty" role="alert">{error} <Button onClick={() => void load()}>Retry</Button></div>}
-    {notice && <AdministrationFeedback message={notice} onDismiss={dismissNotice}/>}
     {loading ? <div className="am-empty">Loading users from PostgreSQL...</div> : <>
       <div className="am-table-scroll"><table className="am-table am-users-table">
         <thead><tr><th>EMPLOYEE</th><th>ROLE</th><th>BRANCH / DEPARTMENT</th><th>STATUS</th><th>LAST ACTIVE</th><th aria-label="Actions"/></tr></thead>

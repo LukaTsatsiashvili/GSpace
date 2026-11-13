@@ -1,68 +1,149 @@
-import { useEffect, useRef, useState } from 'react';
-import { Box, ClipboardList, Download, ShieldCheck, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Boxes, ShieldCheck, X } from 'lucide-react';
 import { Button, Input, NumberInput, Select } from '../components/ui';
+import { resourceApi, type Category, type Branch, type ResourceCondition, type ResourcePayload } from './resource-api';
 import './new-resource.css';
 import './bulk-resource.css';
 
-type Method = 'identical' | 'spreadsheet';
-const categories = ['Laptop', 'Monitor', 'Mobile Device', 'Printer', 'Network', 'Tablet', 'POS Device', 'Other'];
-const branches = ['Head Office', 'Tbilisi Store 01', 'Kutaisi Store 01', 'Batumi Store 01'];
+const conditions: ResourceCondition[] = ['Excellent', 'Good', 'Fair', 'Damaged', 'Poor'];
 
-export default function BulkResourceDialog({ close }: { close: () => void }) {
-  const [method, setMethod] = useState<Method>('identical');
+export default function BulkResourceDialog({ close, categories, branches, saved }: {
+  close: () => void; categories: Category[]; branches: Branch[];
+  saved: (message: string) => void
+}) {
   const [name, setName] = useState('');
-  const [category, setCategory] = useState('Laptop');
+  const [categoryName, setCategoryName] = useState(categories[0]?.name ?? '');
+  const [branchId, setBranchId] = useState(branches[0]?.id ?? '');
+  const [condition, setCondition] = useState<ResourceCondition>('Good');
   const [quantity, setQuantity] = useState('5');
-  const [branch, setBranch] = useState('Head Office');
-  const [condition, setCondition] = useState('Good');
-  const [file, setFile] = useState<File | null>(null);
-  const [error, setError] = useState('');
   const [preview, setPreview] = useState(false);
-  const fileInput = useRef<HTMLInputElement>(null);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState('');
+  const branch = branches.find(item => item.id === branchId);
+  const category = categories.find(item => item.name === categoryName);
+  const requiredFields = category?.definitions.filter(field => field.required) ?? [];
+
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') { if (preview) setPreview(false); else close(); }
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !pending && !document.querySelector('.ui-select-options')) {
+        if (preview) setPreview(false); else close();
+      }
     };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [close, preview]);
-  const showPreview = () => {
-    if (method === 'identical' && !name.trim()) { setError('Please enter a resource name.'); return; }
-    if (method === 'identical' && (!Number.isInteger(Number(quantity)) || Number(quantity) < 1 || Number(quantity) > 1000)) { setError('Enter a quantity between 1 and 1000.'); return; }
-    if (method === 'spreadsheet' && !file) { setError('Choose a CSV or Excel file to preview.'); return; }
-    setError(''); setPreview(true);
-  };
-  const pickFile = (chosen: File | undefined) => {
-    if (!chosen) return;
-    if (!/\.(csv|xlsx|xls)$/i.test(chosen.name)) { setError('Please select a CSV or Excel file.'); return; }
-    setFile(chosen); setError('');
-  };
-  return <div className="rs-overlay rs-modal-overlay" onMouseDown={close}>
-    <section className="nw-modal bw-modal" role="dialog" aria-modal="true" aria-labelledby="bw-title" onMouseDown={event => event.stopPropagation()}>
-      <header className="nw-header"><div><span className="nw-preview-label">BULK REGISTRATION</span><h2 id="bw-title">Create multiple resources</h2><p>Register several assets in one batch without repeating the whole form.</p></div><button className="rs-close" aria-label="Close bulk create" onClick={close}><X size={18}/></button></header>
-      <div className="nw-content bw-content">
-        <div className="bw-intro"><h3>Choose a method</h3><p>Both methods use automatic unique Asset IDs and per-item validation.</p></div>
-        <div className="bw-methods" role="group" aria-label="Bulk creation method">
-          <button type="button" className={`bw-method ${method === 'identical' ? 'selected' : ''}`} aria-pressed={method === 'identical'} onClick={() => { setMethod('identical'); setError(''); }}><Box size={20}/><strong>Multiple identical items</strong><span>Enter a common description and quantity, then review individual serial numbers.</span></button>
-          <button type="button" className={`bw-method ${method === 'spreadsheet' ? 'selected' : ''}`} aria-pressed={method === 'spreadsheet'} onClick={() => { setMethod('spreadsheet'); setError(''); }}><ClipboardList size={20}/><strong>Spreadsheet import</strong><span>Use an Excel or CSV template to prepare varied resources.</span></button>
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
+  }, [close, pending, preview]);
+
+  function review() {
+    setError('');
+    if (name.trim().length < 2 || name.trim().length > 180) {
+      setError('Resource name must contain 2–180 characters.'); return;
+    }
+    if (!category || !branch) {
+      setError('Choose an active category and branch.'); return;
+    }
+    if (!quantity.trim() || !Number.isInteger(Number(quantity)) ||
+        Number(quantity) < 1 || Number(quantity) > 100) {
+      setError('Quantity must be a whole number from 1 to 100.'); return;
+    }
+    setPreview(true);
+  }
+
+  async function create() {
+    if (pending || !category || !branch) return;
+    setPending(true); setError('');
+    try {
+      const template: Omit<ResourcePayload, 'serialNumber'> = {
+        name: name.trim(), category: category.name, branchId: branch.id,
+        resourceType: 'Physical Asset', condition, status: 'AVAILABLE',
+        location: '', description: '', warrantyEnd: null,
+        purchasePrice: null, currency: 'GEL', purchaseDate: null, supplier: '',
+        usefulLifeMonths: null, residualValue: null, customFields: {}
+      };
+      const result = await resourceApi.bulk({ quantity: Number(quantity), template });
+      saved(result.count + ' resources registered (' + result.firstCode + ' – ' + result.lastCode + ').' +
+        (requiredFields.length ? ' Complete required category fields through Edit resource.' : ''));
+    } catch (err) {
+      setPreview(false);
+      setError(err instanceof Error ? err.message : 'Could not create resources.');
+    } finally { setPending(false); }
+  }
+
+  return <div className="rs-overlay rs-modal-overlay" onMouseDown={() => { if (!pending) close(); }}>
+    <section className="nw-modal bw-modal" role="dialog" aria-modal="true"
+      aria-labelledby="bw-title" onMouseDown={event => event.stopPropagation()}>
+      <header className="nw-header">
+        <div>
+          <span className="nw-preview-label">BULK REGISTRATION · POSTGRESQL</span>
+          <h2 id="bw-title">Create multiple resources</h2>
+          <p>Register identical resources with a separate Asset ID for each item.</p>
         </div>
-        {method === 'identical' ? <>
-          <div className="nw-fields bw-fields"><label className="nw-field nw-full"><span>Resource name <b>*</b></span><Input placeholder="e.g. Dell Latitude 7440" value={name} onChange={event => { setName(event.target.value); setError(''); }}/></label>
-            <label className="nw-field"><span>Category</span><Select label="Category" value={category} options={categories} onChange={setCategory}/></label>
-            <label className="nw-field"><span>Quantity</span><NumberInput inputMode="numeric" min={1} max={1000} step={1} value={quantity} onChange={event => { setQuantity(event.target.value); setError(''); }}/></label>
-            <label className="nw-field"><span>Branch</span><Select label="Branch" value={branch} options={branches} onChange={setBranch}/></label>
-            <label className="nw-field"><span>Condition</span><Select label="Condition" value={condition} options={['Excellent','Good','Fair','Damaged','Poor']} onChange={setCondition}/></label></div>
-          <p className="bw-hint">Individual serial numbers and locations are reviewed before final registration.</p>
-        </> : <>
-          <input ref={fileInput} className="nw-file-input" type="file" accept=".csv,.xlsx,.xls" onChange={event => pickFile(event.target.files?.[0])}/>
-          <button type="button" className="nw-dropzone bw-dropzone" onClick={() => fileInput.current?.click()}><Download size={22}/><strong>{file ? file.name : 'Import a CSV or Excel file'}</strong><span>{file ? 'Click to select another file' : 'Prepare data using the official template; rows are validated individually.'}</span></button>
-          <p className="bw-hint">Template columns: Name, Category, Branch, Condition, Serial number, Location, Purchase price and Currency.</p>
-        </>}
-        <div className="nw-notice bw-notice"><span><ShieldCheck size={18}/></span><p><strong>Bulk creation is available only to authorized administrators.</strong> This is a design preview; no resources are inserted.</p></div>
+        <button className="rs-close" type="button" aria-label="Close bulk create"
+          disabled={pending} onClick={close}><X size={18}/></button>
+      </header>
+      <div className="nw-content bw-content">
+        <div className="bw-intro">
+          <span className="bw-intro-icon"><Boxes size={19}/></span>
+          <div><h3>Multiple identical items</h3>
+            <p>Choose shared details and quantity. Each item becomes a separate resource.</p>
+          </div>
+        </div>
+        <div className="nw-fields bw-fields">
+          <label className="nw-field nw-full"><span>Resource name <b>*</b></span>
+            <Input placeholder="e.g. Dell Latitude 7440" maxLength={180} value={name}
+              onChange={event => { setName(event.target.value); setError(''); }}/></label>
+          <label className="nw-field"><span>Category <b>*</b></span>
+            <Select label="Resource category" value={categoryName}
+              options={categories.map(item => item.name)}
+              onChange={value => { setCategoryName(value); setError(''); }}/></label>
+          <label className="nw-field"><span>Quantity (1–100) <b>*</b></span>
+            <NumberInput inputMode="numeric" min={1} max={100} step={1} value={quantity}
+              onChange={event => { setQuantity(event.target.value); setError(''); }}/></label>
+          <label className="nw-field"><span>Branch <b>*</b></span>
+            <Select label="Resource branch" value={branch?.name ?? ''}
+              options={branches.map(item => item.name)}
+              onChange={value => {
+                setBranchId(branches.find(item => item.name === value)?.id ?? '');
+                setError('');
+              }}/></label>
+          <label className="nw-field"><span>Condition <b>*</b></span>
+            <Select label="Resource condition" value={condition} options={conditions}
+              onChange={value => { setCondition(value as ResourceCondition); setError(''); }}/></label>
+        </div>
+        <p className="bw-hint">Serial numbers and other individual details can be added later using Edit resource.</p>
+        {requiredFields.length > 0 && <div className="bw-required-note" role="note">
+          <strong>{category?.name}: {requiredFields.length} required custom field{requiredFields.length === 1 ? '' : 's'}</strong>
+          <p>{requiredFields.map(field => field.label).join(', ')}</p>
+          <p>Registration is allowed now. Fill these fields for each resource through <strong>Edit resource</strong> later.</p>
+        </div>}
+        <div className="nw-notice bw-notice"><span><ShieldCheck size={18}/></span>
+          <p><strong>Safe bulk registration.</strong> Every asset receives its own Asset ID.
+            The batch saves together and all creations are audited.</p>
+        </div>
         {error && <p className="nw-error" role="alert">{error}</p>}
       </div>
-      <footer className="nw-footer"><span>Bulk workflow concept</span><div><Button onClick={close}>Close</Button><Button variant="primary" onClick={showPreview}>Preview batch →</Button></div></footer>
-      {preview && <div className="nw-confirm-overlay" onMouseDown={() => setPreview(false)}><div role="alertdialog" aria-modal="true" aria-label="Batch preview" onMouseDown={event => event.stopPropagation()}><ShieldCheck size={30}/><h3>Batch preview ready</h3><p>{method === 'identical' ? `${quantity} × ${name.trim()} · ${category} · ${branch} · ${condition}` : `Selected file: ${file?.name}. Spreadsheet contents have not been parsed or uploaded.`} No resources have been created.</p><Button variant="primary" onClick={() => setPreview(false)}>Back to bulk create</Button></div></div>}
+      <footer className="nw-footer">
+        <span>1–100 resources per batch</span>
+        <div><Button disabled={pending} onClick={close}>Close</Button>
+          <Button variant="primary" disabled={pending} onClick={review}>Review batch</Button></div>
+      </footer>
+      {preview && <div className="nw-confirm-overlay"
+        onMouseDown={() => { if (!pending) setPreview(false); }}>
+        <div role="alertdialog" aria-modal="true" aria-label="Confirm bulk registration"
+          onMouseDown={event => event.stopPropagation()}>
+          <ShieldCheck size={30}/><h3>Confirm batch registration</h3>
+          <p>{quantity} × {name.trim()} · {category?.name} · {branch?.name} · {condition}.
+            Each resource will receive a unique Asset ID.</p>
+          {requiredFields.length > 0 && <p className="bw-confirm-required">
+            Required Custom Fields will remain unfilled until you edit the created assets.
+          </p>}
+          <div className="bw-confirm-actions">
+            <Button disabled={pending} onClick={() => setPreview(false)}>Back</Button>
+            <Button variant="primary" disabled={pending} onClick={() => { void create(); }}>
+              {pending ? 'Creating...' : 'Create resources'}
+            </Button>
+          </div>
+        </div>
+      </div>}
     </section>
   </div>;
 }

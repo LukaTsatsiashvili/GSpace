@@ -101,6 +101,294 @@ test('session login, CSRF, RBAC directory read and logout', { skip: !process.env
 
 
     // Branch and department CRUD: actual database writes and cross-branch safeguards.
+
+    // Resources: authenticated real CRUD, unique Asset IDs, documents, custom fields and bulk registration.
+    const resourceApi = (path: string, method: 'POST' | 'PATCH' | 'DELETE', body: object) =>
+      fetch(base + '/api/v1/resources' + path, {
+        method, headers: { cookie: both, 'content-type': 'application/json', 'x-csrf-token': csrf.csrfToken },
+        body: JSON.stringify(body)
+      });
+    assert.equal((await fetch(base + '/api/v1/resources')).status, 401);
+    const resourceCatalog = await fetch(base + '/api/v1/resources/catalog', { headers: { cookie: both } });
+    assert.equal(resourceCatalog.status, 200);
+    const catalogData = await resourceCatalog.json() as {
+      categories: { name: string }[]; branches: { id: string; name: string }[]
+    };
+    assert.ok(catalogData.categories.some(value => value.name === 'Laptop'));
+    const resourceBranchId = catalogData.branches.find(value => value.name === 'Head Office')?.id;
+    assert.ok(resourceBranchId);
+    const resourceTemplate = {
+      name: 'Integration Test Laptop', category: 'Laptop', branchId: resourceBranchId,
+      resourceType: 'Physical Asset', condition: 'Good', status: 'AVAILABLE',
+      location: 'IT Office', serialNumber: 'INTEGRATION-123', description: 'Created by integration test',
+      warrantyEnd: '2028-05-02', purchaseDate: '2026-10-20',
+      purchasePrice: 1300.5, currency: 'GEL', supplier: 'Test Supplier',
+      usefulLifeMonths: 36, residualValue: 100, customFields: { processor: 'Intel i7' }
+    };
+    const badResource = await resourceApi('/', 'POST', {
+      ...resourceTemplate, name: '', documents: []
+    });
+    assert.equal(badResource.status, 400);
+    const createdResource = await resourceApi('/', 'POST', {
+      ...resourceTemplate, documents: [{ filename: 'invoice.pdf', mimeType: 'application/pdf',
+        base64: Buffer.from('%PDF-1.7\nintegration test document').toString('base64') }]
+    });
+    assert.equal(createdResource.status, 201);
+    const createdAsset = await createdResource.json() as { id: string; assetCode: string };
+    assert.match(createdAsset.assetCode, /^AST-\d+$/);
+    const stored = await db.resource.findUniqueOrThrow({ where: { id: createdAsset.id },
+      include: { documents: true } });
+    assert.equal(stored.name, resourceTemplate.name);
+    assert.equal(stored.purchasePrice?.toString(), '1300.5');
+    assert.equal(stored.documents.length, 1);
+    const readResource = await fetch(base + '/api/v1/resources/' + createdAsset.id, {
+      headers: { cookie: both }
+    });
+    assert.equal(readResource.status, 200);
+    const readDetails = await readResource.json() as {
+      resource: { documents: { id: string }[]; purchasePrice?: string }
+    };
+    assert.equal(readDetails.resource.purchasePrice, '1300.5');
+    const doc = await fetch(base + '/api/v1/resources/' + createdAsset.id +
+      '/documents/' + readDetails.resource.documents[0].id, { headers: { cookie: both } });
+    assert.equal(doc.status, 200);
+    assert.match(await doc.text(), /^%PDF-1.7/);
+
+
+    // An existing asset accepts late attachments without a full edit or changes to its metadata.
+    const lateFile = {
+      filename: 'გარანტია.pdf', mimeType: 'application/pdf',
+      base64: Buffer.from('%PDF-1.7\nextra warranty').toString('base64')
+    };
+    const missingCsrf = await fetch(base + '/api/v1/resources/' +
+      createdAsset.id + '/documents', {
+      method: 'POST', headers: { cookie: both, 'content-type': 'application/json' },
+      body: JSON.stringify({ documents: [lateFile] })
+    });
+    assert.equal(missingCsrf.status, 403);
+
+    const tooManyInBatch = await resourceApi('/' + createdAsset.id + '/documents', 'POST', {
+      documents: Array.from({ length: 5 }, () => lateFile)
+    });
+    assert.equal(tooManyInBatch.status, 400);
+
+    const lateUpload = await resourceApi('/' + createdAsset.id + '/documents', 'POST', {
+      documents: [lateFile]
+    });
+    assert.equal(lateUpload.status, 201);
+    const lateResult = await lateUpload.json() as {
+      resource: { documents: { id: string; filename: string }[] }
+    };
+    assert.equal(lateResult.resource.documents.length, 2);
+    const extraFile = lateResult.resource.documents.find(x => x.filename === lateFile.filename);
+    assert.ok(extraFile);
+    const downloadedExtra = await fetch(base + '/api/v1/resources/' + createdAsset.id +
+      '/documents/' + extraFile.id, { headers: { cookie: both } });
+    assert.equal(downloadedExtra.status, 200);
+    assert.match(await downloadedExtra.text(), /extra warranty/);
+
+    const invalidLate = await resourceApi('/' + createdAsset.id + '/documents', 'POST', {
+      documents: [{ filename: 'fake.png', mimeType: 'image/png',
+        base64: Buffer.from('%PDF-1.7\nnot PNG').toString('base64') }]
+    });
+    assert.equal(invalidLate.status, 400);
+    const badDelete = await resourceApi('/' + createdAsset.id +
+      '/documents/not-a-real-id', 'DELETE', {});
+    assert.equal(badDelete.status, 404);
+    const removedExtra = await resourceApi('/' + createdAsset.id +
+      '/documents/' + extraFile.id, 'DELETE', {});
+    assert.equal(removedExtra.status, 200);
+    const remainingDocs = await removedExtra.json() as {
+      resource: { documents: { id: string }[] }
+    };
+    assert.equal(remainingDocs.resource.documents.length, 1);
+    const missingFile = await fetch(base + '/api/v1/resources/' + createdAsset.id +
+      '/documents/' + extraFile.id, { headers: { cookie: both } });
+    assert.equal(missingFile.status, 404);
+    const auditOfFiles = await db.resourceAuditEvent.findMany({
+      where: { resourceId: createdAsset.id,
+        action: { in: ['DOCUMENT_ADDED', 'DOCUMENT_DELETED'] } }
+    });
+    assert.equal(auditOfFiles.length, 2);
+    assert.equal(auditOfFiles.some(entry => entry.action === 'DOCUMENT_ADDED'), true);
+    assert.equal(auditOfFiles.some(entry => entry.action === 'DOCUMENT_DELETED'), true);
+
+    const updatedAsset = await resourceApi('/' + createdAsset.id, 'PATCH', {
+      ...resourceTemplate, name: 'Integration Test Laptop Updated', status: 'RETIRED',
+      documents: undefined
+    });
+    assert.equal(updatedAsset.status, 200);
+    assert.equal((await db.resource.findUniqueOrThrow({ where: { id: createdAsset.id } })).status, 'RETIRED');
+    const history = await fetch(base + '/api/v1/resources/' + createdAsset.id + '/audit', {
+      headers: { cookie: both }
+    });
+    assert.equal(history.status, 200);
+    const auditData = await history.json() as { events: { action: string }[] };
+    assert.ok(auditData.events.some(v => v.action === 'CREATED'));
+    assert.ok(auditData.events.some(v => v.action === 'UPDATED'));
+
+    // Asset Manager is permitted to edit details, never to register new records or read financial data.
+    const assetManagerRole = await db.role.findUniqueOrThrow({ where: { key: 'ASSET_MANAGER' } });
+    const assetManagerPassword = 'asset-manager-long-passphrase';
+    const assetManager = await db.user.create({ data: {
+      email: 'resource-test-manager@example.test', fullName: 'Resource Test Manager',
+      roleId: assetManagerRole.id, branchId: resourceBranchId,
+      credential: { create: { passwordHash: await hashPassword(assetManagerPassword) } }
+    } });
+    const assetManagerLogin = await fetch(base + '/api/v1/auth/login', {
+      method: 'POST', headers: { cookie: csrfCookie, 'content-type': 'application/json',
+        'x-csrf-token': csrf.csrfToken },
+      body: JSON.stringify({ email: assetManager.email, password: assetManagerPassword })
+    });
+    assert.equal(assetManagerLogin.status, 200);
+    const assetCookie = assetManagerLogin.headers.get('set-cookie')?.split(';')[0];
+    assert.ok(assetCookie);
+    const assetHeaders = { cookie: csrfCookie + '; ' + assetCookie };
+    const assetView = await fetch(base + '/api/v1/resources/' + createdAsset.id, {
+      headers: assetHeaders
+    });
+    assert.equal(assetView.status, 200);
+    const assetViewResult = await assetView.json() as { resource: { purchasePrice?: string } };
+    assert.equal(assetViewResult.resource.purchasePrice, undefined);
+    const assetEdit = await fetch(base + '/api/v1/resources/' + createdAsset.id, {
+      method: 'PATCH', headers: { ...assetHeaders,
+        'content-type': 'application/json', 'x-csrf-token': csrf.csrfToken },
+      body: JSON.stringify({
+        ...resourceTemplate, status: 'AVAILABLE', purchasePrice: null, purchaseDate: null,
+        supplier: '', usefulLifeMonths: null, residualValue: null, location: 'Asset Manager Edited'
+      })
+    });
+    assert.equal(assetEdit.status, 200);
+    assert.equal((await db.resource.findUniqueOrThrow({ where: { id: createdAsset.id } })).purchasePrice?.toString(), '1300.5');
+    // Resource editors can attach documents without the asset-creation grant.
+    const managerUpload = await fetch(base + '/api/v1/resources/' +
+      createdAsset.id + '/documents', {
+      method: 'POST',
+      headers: { ...assetHeaders, 'content-type': 'application/json',
+        'x-csrf-token': csrf.csrfToken },
+      body: JSON.stringify({ documents: [{
+        filename: 'editor.pdf', mimeType: 'application/pdf',
+        base64: Buffer.from('%PDF-1.7\neditor document').toString('base64')
+      }] })
+    });
+    assert.equal(managerUpload.status, 201);
+
+    const forbiddenCreate = await fetch(base + '/api/v1/resources', {
+      method: 'POST', headers: { ...assetHeaders,
+        'content-type': 'application/json', 'x-csrf-token': csrf.csrfToken },
+      body: JSON.stringify({ ...resourceTemplate, documents: [] })
+    });
+    assert.equal(forbiddenCreate.status, 403);
+    const forbiddenImport = await fetch(base + '/api/v1/resources/bulk/import', {
+      method: 'POST', headers: { cookie: both, 'content-type': 'application/json',
+        'x-csrf-token': csrf.csrfToken }, body: JSON.stringify({ resources: [] })
+    });
+    assert.equal(forbiddenImport.status, 404);
+
+
+    const bulkTemplate = {
+      ...resourceTemplate, name: 'Batch Laptop', serialNumber: undefined,
+      purchaseDate: null, purchasePrice: null, supplier: '',
+      usefulLifeMonths: null, residualValue: null
+    };
+    const bulk = await resourceApi('/bulk', 'POST', {
+      template: bulkTemplate, quantity: 3
+    });
+    assert.equal(bulk.status, 201);
+    const bulkResult = await bulk.json() as { count: number; firstCode: string; lastCode: string };
+    assert.equal(bulkResult.count, 3);
+    assert.notEqual(bulkResult.firstCode, createdAsset.assetCode);
+
+    const customCategory = await resourceApi('/categories', 'POST', {
+      name: 'Test New Equipment', definitions: [
+        { key: 'identification', label: 'Identification', required: true }
+      ]
+    });
+    assert.equal(customCategory.status, 201);
+    const categoryId = (await customCategory.json() as { id: string }).id;
+    const missingCustom = await resourceApi('/', 'POST', {
+      ...resourceTemplate, category: 'Test New Equipment', customFields: {}, documents: []
+    });
+    assert.equal(missingCustom.status, 400);
+
+    // Identical-item Bulk Create intentionally accepts incomplete required Custom Fields;
+    // assets can be completed later through Edit Resource.
+    const incompleteBatch = await resourceApi('/bulk', 'POST', {
+      template: {
+        ...bulkTemplate, category: 'Test New Equipment', customFields: {},
+        location: 'Asset Storage'
+      },
+      quantity: 2
+    });
+    assert.equal(incompleteBatch.status, 201);
+    const incompleteBatchResult = await incompleteBatch.json() as {
+      count: number; firstCode: string; lastCode: string
+    };
+    assert.equal(incompleteBatchResult.count, 2);
+    const incompleteResource = await db.resource.findUniqueOrThrow({
+      where: { assetCode: incompleteBatchResult.firstCode }
+    });
+    assert.deepEqual(incompleteResource.customFields, {});
+    assert.equal(incompleteResource.category, 'Test New Equipment');
+    assert.equal(incompleteResource.status, 'AVAILABLE');
+
+    // Document uploads operate independently of incomplete required custom fields.
+    const documentsBeforeSpecifications = await resourceApi(
+      '/' + incompleteResource.id + '/documents', 'POST', {
+        documents: [{ filename: 'post-registration.pdf', mimeType: 'application/pdf',
+          base64: Buffer.from('%PDF-1.7\nuploaded before specifications').toString('base64') }]
+      }
+    );
+    assert.equal(documentsBeforeSpecifications.status, 201);
+    const incompletelyRegistered = await documentsBeforeSpecifications.json() as {
+      resource: { customFields: Record<string, string>; documents: { filename: string }[] }
+    };
+    assert.deepEqual(incompletelyRegistered.resource.customFields, {});
+    assert.equal(incompletelyRegistered.resource.documents.length, 1);
+
+
+    const stillRequiredOnEdit = await resourceApi('/' + incompleteResource.id, 'PATCH', {
+      ...resourceTemplate, name: 'Completed Later', category: 'Test New Equipment',
+      customFields: {}, status: 'AVAILABLE'
+    });
+    assert.equal(stillRequiredOnEdit.status, 400);
+    const filledLater = await resourceApi('/' + incompleteResource.id, 'PATCH', {
+      ...resourceTemplate, name: 'Completed Later', category: 'Test New Equipment',
+      customFields: { identification: 'COMPLETED-EDIT-1' }, status: 'AVAILABLE'
+    });
+    assert.equal(filledLater.status, 200);
+    assert.deepEqual((await db.resource.findUniqueOrThrow({
+      where: { id: incompleteResource.id }
+    })).customFields, { identification: 'COMPLETED-EDIT-1' });
+
+    // Missing required specs do not waive other field validation or branch security.
+    const invalidBulk = await resourceApi('/bulk', 'POST', {
+      template: { ...bulkTemplate, category: 'Test New Equipment',
+        customFields: {}, condition: 'Invalid condition' }, quantity: 2
+    });
+    assert.equal(invalidBulk.status, 400);
+
+    const customResource = await resourceApi('/', 'POST', {
+      ...resourceTemplate, name: 'Custom Equipment', category: 'Test New Equipment',
+      customFields: { identification: 'TEST-RESOURCE-1' }, documents: []
+    });
+    assert.equal(customResource.status, 201);
+    const cannotDisable = await resourceApi('/categories/' + categoryId, 'PATCH', {
+      name: 'Test New Equipment', definitions: [
+        { key: 'identification', label: 'Identification', required: true }
+      ], active: false
+    });
+    assert.equal(cannotDisable.status, 409);
+
+    const deleted = await resourceApi('/' + createdAsset.id, 'DELETE', {});
+    assert.equal(deleted.status, 204);
+    assert.equal(await db.resource.findUnique({ where: { id: createdAsset.id } }), null);
+    assert.ok((await db.resourceAuditEvent.count({ where: { resourceId: createdAsset.id } })) >= 3);
+    const resourceList = await fetch(base + '/api/v1/resources', { headers: { cookie: both } });
+    assert.equal(resourceList.status, 200);
+    const resourceSummary = await resourceList.json() as { summary: { total: number }; resources: unknown[] };
+    assert.ok(resourceSummary.summary.total >= 6);
+
     const organization = await fetch(base + '/api/v1/admin/organization', { headers: { cookie: both } });
     assert.equal(organization.status, 200);
     const initialOrg = await organization.json() as { branches: { id: string; code: string }[] };
@@ -180,6 +468,15 @@ test('session login, CSRF, RBAC directory read and logout', { skip: !process.env
       headers: { cookie: employeeCookies }
     });
     assert.equal(employeeRead.status, 403);
+    const readOnlyDocumentWrite = await fetch(base + '/api/v1/resources/' +
+      createdAsset.id + '/documents', {
+      method: 'POST', headers: { cookie: employeeCookies, 'content-type': 'application/json',
+        'x-csrf-token': csrf.csrfToken },
+      body: JSON.stringify({ documents: [{ filename: 'test.pdf',
+        mimeType: 'application/pdf', base64: Buffer.from('%PDF-1.7\ntest').toString('base64') }] })
+    });
+    assert.equal(readOnlyDocumentWrite.status, 403);
+
     const employeeWrite = await orgWrite('/departments', 'POST', {
       name: 'Forbidden Department', branchId: adminIdentity.branchId, leadUserId: null, active: true
     }, employeeCookies);

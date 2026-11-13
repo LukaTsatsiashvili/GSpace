@@ -7,6 +7,7 @@ import adminRouter from './routes/admin.js';
 import adminUsersRouter from './routes/admin-users.js';
 import adminRolesRouter from './routes/admin-roles.js';
 import adminOrganizationRouter from './routes/admin-organization.js';
+import resourcesRouter from './routes/resources.js';
 import { csrfGuard } from './security/auth.js';
 
 export const app = express();
@@ -15,7 +16,7 @@ const origin = new URL(process.env.WEB_ORIGIN || 'http://localhost:5173').origin
 app.disable('x-powered-by');
 app.use(helmet());
 app.use(cors({ origin, credentials: true }));
-app.use(express.json({ limit: '1mb', type: 'application/json' }));
+app.use(express.json({ limit: '12mb', type: 'application/json' }));
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', service: 'gspace-api' });
@@ -27,6 +28,7 @@ app.use('/api/v1/admin', adminUsersRouter);
 app.use('/api/v1/admin', adminRolesRouter);
 app.use('/api/v1/admin', adminOrganizationRouter);
 app.use('/api/v1/admin', adminRouter);
+app.use('/api/v1/resources', resourcesRouter);
 app.use('/api', (_req, res) => {
   res.status(404).json({ error: { code: 'NOT_FOUND', message: 'API endpoint not found' } });
 });

@@ -154,15 +154,74 @@ model SecurityAuditEvent {
 }
 
 model Resource {
-  id          String         @id @default(uuid())
-  assetCode   String         @unique
-  name        String
-  category    String
-  status      ResourceStatus @default(AVAILABLE)
-  branchId    String
-  branch      Branch         @relation(fields: [branchId], references: [id])
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  id                 String         @id @default(uuid())
+  assetCode          String         @unique
+  name               String
+  category           String
+  resourceType       String         @default("Physical Asset")
+  status             ResourceStatus @default(AVAILABLE)
+  condition          String         @default("Good")
+  branchId           String
+  branch             Branch         @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  location           String         @default("")
+  serialNumber       String?
+  description        String         @default("")
+  warrantyEnd        DateTime?
+  purchaseDate       DateTime?
+  purchasePrice      Decimal?       @db.Decimal(18, 2)
+  currency           String         @default("GEL")
+  supplier           String         @default("")
+  usefulLifeMonths   Int?
+  residualValue      Decimal?       @db.Decimal(18, 2)
+  customFields       Json           @default("{}")
+  documents          ResourceDocument[]
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  @@index([branchId, status])
+  @@index([category])
+  @@index([createdAt])
+}
+
+model ResourceAuditEvent {
+  id         String   @id @default(uuid())
+  resourceId String
+  assetCode  String
+  action     String
+  actorId    String
+  actorName  String
+  before     Json?
+  after      Json?
+  createdAt  DateTime @default(now())
+
+  @@index([resourceId, createdAt])
+}
+
+model ResourceCounter {
+  name        String @id
+  nextNumber  Int
+}
+
+model ResourceCategory {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  active      Boolean  @default(true)
+  definitions Json     @default("[]")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model ResourceDocument {
+  id          String   @id @default(uuid())
+  resourceId  String
+  resource    Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+  filename    String
+  mimeType    String
+  byteSize    Int
+  content     Bytes
+  createdAt   DateTime @default(now())
+
+  @@index([resourceId, createdAt])
 }
 
 enum ResourceStatus {
