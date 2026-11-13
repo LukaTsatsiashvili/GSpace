@@ -65,6 +65,31 @@ export const assignmentsApi = {
     request<{ ok: boolean }>('/' + encodeURIComponent(id) + '/transfers/cancel', {})
 };
 
+/** Export selected, server-authorized assignments; the server records the download in Security Audit. */
+export async function exportAssignmentsCsv(ids: string[]): Promise<void> {
+  const csrf = await fetch('/api/v1/auth/csrf', { credentials: 'same-origin', cache: 'no-store' });
+  if (!csrf.ok) throw Error('Could not initialize secure export');
+  const { csrfToken } = await csrf.json() as { csrfToken: string };
+  const response = await fetch('/api/v1/assignments/export', {
+    method: 'POST', credentials: 'same-origin', cache: 'no-store',
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+    body: JSON.stringify({ ids })
+  });
+  if (!response.ok) {
+    const result = await response.json().catch(() => ({})) as { error?: { message?: string } };
+    throw Error(result.error?.message ?? 'Assignment export failed');
+  }
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'gspace-assignments.csv';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 export async function downloadEvidence(assignmentId: string, itemId: string, filename: string): Promise<void> {
   const url = '/api/v1/assignments/' + encodeURIComponent(assignmentId) + '/items/' +
     encodeURIComponent(itemId) + '/evidence';
