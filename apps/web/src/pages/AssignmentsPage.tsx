@@ -4,7 +4,7 @@ import { Badge, Button, Card, Checkbox, Input, PageHeader, SearchInput, SectionT
 import { useAuth } from '../auth/AuthGate';
 import { useToast } from '../components/toast';
 import { asFilePayload } from './resource-api';
-import { assignmentsApi, downloadEvidence, type Assignment, type AssignmentAsset, type AssignmentStatus, type AvailableAsset, type Lookups, type Receipt, type Summary } from './assignments-api';
+import { assignmentsApi, downloadEvidence, exportAssignmentsCsv, type Assignment, type AssignmentAsset, type AssignmentStatus, type AvailableAsset, type Lookups, type Receipt, type Summary } from './assignments-api';
 import './assignments.css';
 
 type Tab = 'All assignments' | 'Pending' | 'Active' | 'Returns' | 'History';
@@ -308,6 +308,7 @@ export default function AssignmentsPage() {
   const [summary, setSummary] = useState<Summary>(emptySummary);
   const [lookups, setLookups] = useState<Lookups>(emptyLookups);
   const [truncated, setTruncated] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [tab, setTab] = useState<Tab>('All assignments');
@@ -340,10 +341,21 @@ export default function AssignmentsPage() {
       .some(x => x.toLowerCase().includes(term));
     return matchTab && matchSearch && (branch === 'All branches' || a.branch === branch);
   }), [assignments, tab, search, branch]);
+  const canExport = user.role.permissions.includes('reports.export');
+  async function exportCsv() {
+    if (!canExport || exporting || !visible.length) return;
+    setExporting(true);
+    try {
+      await exportAssignmentsCsv(visible.map(assignment => assignment.id));
+      toast.success('Assignment CSV exported. The download was recorded in Security Audit.');
+    } catch (error) { toast.error(errorText(error)); }
+    finally { setExporting(false); }
+  }
   return <div className="as-page">
     <PageHeader eyebrow="ASSET LIFECYCLE / HANDOVERS" title="Assignments" badgeLabel="Connected to PostgreSQL"
       description="Issue, acknowledge, transfer and return company assets with a permanent custody trail."
-      actions={<><Button icon={<ArrowDownToLine size={16}/>} onClick={() => toast.info('Assignment CSV/PDF exports are not yet enabled.')}>Export</Button>
+      actions={<>{canExport && <Button icon={<ArrowDownToLine size={16}/>} disabled={exporting || !visible.length}
+        onClick={() => { void exportCsv(); }}>{exporting ? 'Exporting...' : 'Export CSV'}</Button>}
         {lookups.canManage && <Button variant="primary" icon={<Plus size={17}/>} onClick={() => setCreating(true)}>New assignment</Button>}</>}/>
     <div className="as-summary">
       <Card className="as-stat"><div className="as-stat-top"><span>Active assignments</span><span className="as-stat-icon mint"><UsersRound size={19}/></span></div><strong>{summary.active}</strong><small>Assignments in use</small></Card>
