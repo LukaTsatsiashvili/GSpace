@@ -490,8 +490,16 @@ test('session login, CSRF, RBAC directory read and logout', { skip: !process.env
       decisions: [{ itemId: item.id, decision: 'ACCEPT', notes: '' }]
     })).status, 403);
     assert.equal((await assignmentWrite('/' + assignmentId + '/receipt', employeeCookies, {
-      decisions: [{ itemId: item.id, decision: 'ACCEPT', notes: 'Confirmed in test' }]
+      decisions: [{ itemId: item.id, decision: 'REPORT_ISSUE',
+        damageReported: true, notes: 'Damaged item reported' }]
+    })).status, 400);
+    const tinyPng = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+XJioAAAAASUVORK5CYII=';
+    assert.equal((await assignmentWrite('/' + assignmentId + '/receipt', employeeCookies, {
+      decisions: [{ itemId: item.id, decision: 'ACCEPT', notes: 'Confirmed in test',
+        evidence: { filename: 'receipt.png', mimeType: 'image/png', base64: tinyPng } }]
     })).status, 200);
+    assert.equal((await fetch(base + '/api/v1/assignments/' + assignmentId +
+      '/items/' + item.id + '/evidence', { headers: { cookie: employeeCookies } })).status, 200);
     assert.equal((await assignmentWrite('/' + assignmentId + '/receipt', employeeCookies, {
       decisions: [{ itemId: item.id, decision: 'ACCEPT', notes: 'Duplicate' }]
     })).status, 409);
