@@ -5,12 +5,33 @@ export type CustomDefinition = { key: string; label: string; required: boolean }
 export type Category = { id: string; name: string; definitions: CustomDefinition[] };
 export type Branch = { id: string; name: string };
 export type DocumentMeta = { id: string; filename: string; mimeType: string; byteSize: number; createdAt: string };
+export type ResourceCustody = {
+  assignmentId: string; assignmentCode: string; userId: string;
+  userName: string; itemStatus: string; issuedAt: string;
+  returnDue: string | null; pendingRecipientName: string | null;
+};
+export type ResourceAssignment = {
+  itemId: string; assignmentId: string; assignmentCode: string;
+  kind: 'BRANCH_ISSUE' | 'EMPLOYEE_TRANSFER';
+  recipientId: string; recipientName: string; issuedByName: string;
+  issuedAt: string; returnDue: string | null; notes: string;
+  status: string; conditionOnIssue: string; receiptNotes: string;
+  acceptedAt: string | null; returnRequestedAt: string | null;
+  returnedAt: string | null; returnCondition: string | null;
+  evidence: { filename: string; mimeType: string; byteSize: number } | null;
+  events: { id: string; itemId: string | null; action: string; actorName: string; createdAt: string }[];
+};
+export type ResourceAssignmentHistory = {
+  current: ResourceCustody | null; assignments: ResourceAssignment[];
+  total: number; truncated: boolean;
+};
 export type ResourceRecord = {
   id: string; assetCode: string; name: string; category: string; resourceType: ResourceType;
   condition: ResourceCondition; status: ResourceStatus; branchId: string; branch: string;
   location: string; serialNumber: string | null; description: string;
   warrantyEnd: string | null; customFields: Record<string, string>;
   documents: DocumentMeta[]; createdAt: string; updatedAt: string;
+  assignedTo: ResourceCustody | null;
   purchasePrice?: string | null; currency?: string; purchaseDate?: string | null;
   supplier?: string; usefulLifeMonths?: number | null; residualValue?: string | null;
 };
@@ -67,6 +88,7 @@ export const resourceApi = {
     request<{ resource: ResourceRecord }>('/' + encodeURIComponent(id) +
       '/documents/' + encodeURIComponent(documentId), { method: 'DELETE' }),
   audit: (id: string) => request<{ events: AuditEntry[] }>('/' + encodeURIComponent(id) + '/audit'),
+  assignments: (id: string) => request<ResourceAssignmentHistory>('/' + encodeURIComponent(id) + '/assignments'),
   remove: (id: string) => request<void>('/' + encodeURIComponent(id), { method: 'DELETE' }),
   categoryCreate: (body: { name: string; definitions: CustomDefinition[] }) =>
     request<{ id: string }>('/categories', { method: 'POST', body }),
