@@ -78,7 +78,7 @@ export function parseResourceCsv(text: string, categories: Category[], branches:
   const find = (row: string[], key: string) => row[cols.indexOf(key)]?.trim() ?? '';
   // Generated templates prefix apostrophes to defend against CSV formula injection.
   // Restore those prefixes only for lookup values that match actual catalog records.
-  const catalogName = (raw: string) => raw.startsWith("'") && /^[=+\\-@\\t\\r]/.test(raw.slice(1))
+  const catalogName = (raw: string) => raw.startsWith("'") && /^[=+\-@\t\r]/.test(raw.slice(1))
     ? raw.slice(1) : raw;
   for (const key of ['name', 'category', 'branch', 'condition']) {
     if (!cols.includes(key)) throw Error('Required CSV column missing: ' + key);

@@ -60,7 +60,7 @@ test('template safely round-trips names with Georgian text, commas and spreadshe
   const dangerousBranch: Branch[] = [{ id: 'branch-safe', name: '+თბილისი, ოფისი' }];
   const csv = buildResourceCsvTemplate(dangerousCategory, dangerousBranch, true);
   assert.match(csv, /"'=Laptop, ბიზნეს"/);
-  assert.match(csv, /"'+თბილისი, ოფისი"/);
+  assert.match(csv, /"'\+თბილისი, ოფისი"/);
   // Replace only the initially blank Name cell; preserve the generated quoted catalog values.
   const usable = csv.replace('\r\n""', '\r\n"პირადი კომპიუტერი"');
   const row = parseResourceCsv(usable, dangerousCategory, dangerousBranch, true)[0];
