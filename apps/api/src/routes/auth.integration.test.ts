@@ -160,6 +160,18 @@ test('session login, CSRF, RBAC directory read and logout', { skip: !process.env
       filename: 'გარანტია.pdf', mimeType: 'application/pdf',
       base64: Buffer.from('%PDF-1.7\nextra warranty').toString('base64')
     };
+    const missingCsrf = await fetch(base + '/api/v1/resources/' +
+      createdAsset.id + '/documents', {
+      method: 'POST', headers: { cookie: both, 'content-type': 'application/json' },
+      body: JSON.stringify({ documents: [lateFile] })
+    });
+    assert.equal(missingCsrf.status, 403);
+
+    const tooManyInBatch = await resourceApi('/' + createdAsset.id + '/documents', 'POST', {
+      documents: Array.from({ length: 5 }, () => lateFile)
+    });
+    assert.equal(tooManyInBatch.status, 400);
+
     const lateUpload = await resourceApi('/' + createdAsset.id + '/documents', 'POST', {
       documents: [lateFile]
     });
@@ -248,6 +260,19 @@ test('session login, CSRF, RBAC directory read and logout', { skip: !process.env
     });
     assert.equal(assetEdit.status, 200);
     assert.equal((await db.resource.findUniqueOrThrow({ where: { id: createdAsset.id } })).purchasePrice?.toString(), '1300.5');
+    // Resource editors can attach documents without the asset-creation grant.
+    const managerUpload = await fetch(base + '/api/v1/resources/' +
+      createdAsset.id + '/documents', {
+      method: 'POST',
+      headers: { ...assetHeaders, 'content-type': 'application/json',
+        'x-csrf-token': csrf.csrfToken },
+      body: JSON.stringify({ documents: [{
+        filename: 'editor.pdf', mimeType: 'application/pdf',
+        base64: Buffer.from('%PDF-1.7\neditor document').toString('base64')
+      }] })
+    });
+    assert.equal(managerUpload.status, 201);
+
     const forbiddenCreate = await fetch(base + '/api/v1/resources', {
       method: 'POST', headers: { ...assetHeaders,
         'content-type': 'application/json', 'x-csrf-token': csrf.csrfToken },
@@ -428,6 +453,15 @@ test('session login, CSRF, RBAC directory read and logout', { skip: !process.env
       headers: { cookie: employeeCookies }
     });
     assert.equal(employeeRead.status, 403);
+    const readOnlyDocumentWrite = await fetch(base + '/api/v1/resources/' +
+      createdAsset.id + '/documents', {
+      method: 'POST', headers: { cookie: employeeCookies, 'content-type': 'application/json',
+        'x-csrf-token': csrf.csrfToken },
+      body: JSON.stringify({ documents: [{ filename: 'test.pdf',
+        mimeType: 'application/pdf', base64: Buffer.from('%PDF-1.7\ntest').toString('base64') }] })
+    });
+    assert.equal(readOnlyDocumentWrite.status, 403);
+
     const employeeWrite = await orgWrite('/departments', 'POST', {
       name: 'Forbidden Department', branchId: adminIdentity.branchId, leadUserId: null, active: true
     }, employeeCookies);
