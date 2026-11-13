@@ -692,6 +692,19 @@ test('session login, CSRF, RBAC directory read and logout', { skip: !process.env
     });
     assert.equal(reactivateBranch.status, 200);
 
+    // The resource handover history API must respect the same branch boundary
+    // as the resource register and must not leak another branch's personnel.
+    const otherBranchCreated = await resourceApi('/', 'POST', {
+      ...resourceTemplate, name: 'Second Branch Integration Laptop',
+      branchId, serialNumber: 'CROSS-BRANCH-RESOURCE', documents: []
+    });
+    assert.equal(otherBranchCreated.status, 201);
+    const otherBranchResource = await otherBranchCreated.json() as { id: string };
+    assert.equal((await fetch(base + '/api/v1/resources/' + otherBranchResource.id + '/assignments',
+      { headers: { cookie: managerCookies } })).status, 404);
+    assert.equal((await fetch(base + '/api/v1/resources/' + otherBranchResource.id,
+      { headers: { cookie: managerCookies } })).status, 404);
+
     const transferEmployee = await fetch(base + '/api/v1/admin/users/' + employee.id, {
       method: 'PATCH', headers: {
         cookie: both, 'content-type': 'application/json', 'x-csrf-token': csrf.csrfToken
