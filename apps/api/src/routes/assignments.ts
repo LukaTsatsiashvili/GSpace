@@ -192,14 +192,17 @@ router.get('/lookups', run(async (_req, res) => {
   const actor = principal(res);
   const authorized = actor.permissions.includes('assignments.manage');
   const where = isCentral(actor) ? {} : { branchId: actor.branchId };
-  const [people, resources, branches] = authorized ? await Promise.all([
-    db.user.findMany({ where: { ...where, active: true }, select: { id: true, fullName: true, branchId: true },
-      orderBy: { fullName: 'asc' } }),
-    db.resource.findMany({ where: { ...where, status: 'AVAILABLE', branch: { active: true } },
+  // Any employee may initiate a same-branch handover of their own accepted items.
+  // Only managers receive available inventory and broad branch lookups.
+  const [people, resources, branches] = await Promise.all([
+    db.user.findMany({ where: { ...(authorized ? where : { branchId: actor.branchId }), active: true },
+      select: { id: true, fullName: true, branchId: true }, orderBy: { fullName: 'asc' } }),
+    authorized ? db.resource.findMany({ where: { ...where, status: 'AVAILABLE', branch: { active: true } },
       select: { id: true, assetCode: true, name: true, condition: true, branchId: true },
-      orderBy: { assetCode: 'asc' }, take: 500 }),
-    db.branch.findMany({ where: { ...where, active: true }, select: { id: true, name: true } })
-  ]) : [[], [], []];
+      orderBy: { assetCode: 'asc' }, take: 500 }) : Promise.resolve([]),
+    authorized ? db.branch.findMany({ where: { ...where, active: true },
+      select: { id: true, name: true } }) : Promise.resolve([])
+  ]);
   res.json({ recipients: people, availableAssets: resources, branches, canManage: authorized });
 }));
 
