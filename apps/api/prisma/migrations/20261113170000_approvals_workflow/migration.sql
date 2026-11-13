@@ -87,3 +87,28 @@ ALTER TABLE "ApprovalRequest" ADD CONSTRAINT "ApprovalRequest_branchId_fkey" FOR
 ALTER TABLE "ApprovalReview" ADD CONSTRAINT "ApprovalReview_requestId_fkey" FOREIGN KEY ("requestId") REFERENCES "ApprovalRequest"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "ApprovalReview" ADD CONSTRAINT "ApprovalReview_reviewerId_fkey" FOREIGN KEY ("reviewerId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "ApprovalEvent" ADD CONSTRAINT "ApprovalEvent_requestId_fkey" FOREIGN KEY ("requestId") REFERENCES "ApprovalRequest"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+
+-- Add only the newly introduced approval grants to existing standard roles.
+-- This also supports fresh installations: bootstrap adds role grants after migrations.
+INSERT INTO "Permission" ("id", "key", "description") VALUES
+  (gen_random_uuid()::text, 'approvals.request', 'Submit and track personal resource requests'),
+  (gen_random_uuid()::text, 'approvals.review', 'Decide requests explicitly assigned to the user'),
+  (gen_random_uuid()::text, 'approvals.configure', 'Manage versioned request types and approval routes')
+ON CONFLICT ("key") DO NOTHING;
+
+INSERT INTO "RolePermission" ("roleId", "permissionId")
+SELECT r."id", p."id"
+FROM "Role" r
+CROSS JOIN "Permission" p
+WHERE (
+    p."key" = 'approvals.request'
+    AND r."key" IN ('SYSTEM_ADMIN','COMPANY_ADMIN','BRANCH_MANAGER','ASSET_MANAGER','EMPLOYEE')
+  ) OR (
+    p."key" = 'approvals.review'
+    AND r."key" IN ('SYSTEM_ADMIN','COMPANY_ADMIN','BRANCH_MANAGER','ASSET_MANAGER')
+  ) OR (
+    p."key" = 'approvals.configure'
+    AND r."key" IN ('SYSTEM_ADMIN','COMPANY_ADMIN')
+  )
+ON CONFLICT DO NOTHING;
