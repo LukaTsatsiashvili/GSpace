@@ -14,6 +14,7 @@ This stage converts the approved Assignments page from illustrative entries to P
 - Each change writes `AssignmentEvent` and `SecurityAuditEvent`. Resource lifecycle status changes also create `ResourceAuditEvent` records. Resource deletion is rejected when historical assignment items exist.
 - Receipt photo evidence may be attached (JPEG/PNG/WebP, up to 2 MiB, stored privately in PostgreSQL). For items whose issue condition is `Damaged`, or which are newly marked damaged by the recipient, a photo is mandatory when responding.
 - Assignment listing, summary, current eligible resources, recipients and history now come from real API data. Empty states never substitute fictional records.
+- The Resources register now resolves `Assigned to` from open custody records. The employee remains accountable during a pending direct transfer until the new recipient accepts; unconfirmed initial issuance is marked awaiting confirmation. Resource Details → Assignments displays real current custody, item-level handover history, conditions and event chronology. Reads follow the existing `assets.view` and branch policy.
 - Existing shared inputs, selectors, checkboxes, light/dark palette and global toast feedback remain in use.
 
 ## Routes
@@ -26,6 +27,7 @@ All paths begin with `/api/v1/assignments` and require authenticated sessions. W
 | GET | `/` | Current recipient's handovers, plus scoped manager records |
 | GET | `/:assignmentId` | Recipient or scoped manager |
 | GET | `/:assignmentId/items/:itemId/evidence` | Recipient or scoped manager; download private receipt photo |
+| POST | `/export` | `reports.export`, enforced server-side with recipient/manager visibility |
 | POST | `/` | Scoped `assignments.manage` |
 | POST | `/:assignmentId/receipt` | Recipient only |
 | POST | `/:assignmentId/returns/request` | Recipient or scoped manager |
@@ -58,7 +60,7 @@ GitHub Actions tests Prisma migrations with disposable PostgreSQL 17, backend ty
 
 ## Known limitations and next iterations
 
-- Assignment CSV/PDF exports and printable, signed PDF handover forms are not implemented. The Export button reports this honestly.
+- Assignment **CSV export is implemented**: users with `reports.export` permission can download their currently filtered, server-authorized handovers, one row per asset. The service validates all selected IDs, limits requests to 200 assignments, escapes spreadsheet formulas, and audits successful exports as `ASSIGNMENTS_EXPORTED`. PDF handover forms and PDF exports are still deferred.
 - No in-app/email/browser notifications, due-date reminders, auto-escalation, or return/issue photo on the handover PDF yet. No automatic approval occurs.
 - First 200 accessible assignments are shown; the UI identifies truncation. Full server-side pagination and exact all-record KPIs are future work.
 - No cross-branch transfers in this module; those belong to the dedicated Transfers workflow.
