@@ -18,7 +18,7 @@ GSpace is an internal enterprise resource-management application. This repositor
 5. Run `npm run dev` to start the web and API development servers.
 6. Open `http://localhost:5173` (API health: `http://localhost:4000/api/health`).
 
-The initial interface uses illustrative data and is **not** a production resource-management system yet. Authentication, authorization, workflows, auditing, and data persistence will be added and tested incrementally before production deployment.
+**Implementation status:** Authentication, Administration Users/Roles/Organization, Resources, Assignments and Requests & Approvals are connected to PostgreSQL on the current development branch. Other modules still display illustrative data. The application is **not yet production-ready**; functionality, backups, notifications, remaining modules and security hardening are being completed incrementally.
 
 ## Repository layout
 
@@ -35,3 +35,5 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for boundaries, principles, and
 ## Backend / Authentication foundation
 
 See [docs/AUTH_FOUNDATION.md](docs/AUTH_FOUNDATION.md) for secure local initialization, PostgreSQL baseline migrations, first-administrator bootstrap, API endpoints, limitations and tests. The UI remains a prototype until each business module is implemented.
+
+Approval workflow implementation and limitations: [docs/APPROVALS.md](docs/APPROVALS.md).
