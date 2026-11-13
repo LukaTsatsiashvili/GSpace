@@ -516,7 +516,7 @@ test('session login, CSRF, RBAC directory read and logout', { skip: !process.env
     });
     assert.equal(deniedIssue.status, 403);
     const createdAssignment = await assignmentWrite('/', both, {
-      recipientId: employee.id, resourceIds: [incompleteResource.id], dueAt: null, notes: 'Test handover'
+      recipientId: employee.id, resourceIds: [incompleteResource.id], dueAt: null, notes: '=1+1'
     });
     assert.equal(createdAssignment.status, 201);
     const assignmentId = (await createdAssignment.json() as { id: string }).id;
@@ -585,6 +585,22 @@ test('session login, CSRF, RBAC directory read and logout', { skip: !process.env
     const completed = await fetch(base + '/api/v1/assignments/' + assignmentId,
       { headers: { cookie: both } });
     assert.equal((await completed.json() as { assignment: { status: string } }).assignment.status, 'Completed');
+
+    // Export is real CSV, limited to server-authorized handovers and audited.
+    assert.equal((await assignmentWrite('/export', employeeCookies, { ids: [assignmentId] })).status, 403);
+    assert.equal((await assignmentWrite('/export', managerCookies, { ids: [assignmentId] })).status, 403);
+    assert.equal((await assignmentWrite('/export', both, { ids: [assignmentId, assignmentId] })).status, 400);
+    const exportedAssignments = await assignmentWrite('/export', both, { ids: [assignmentId] });
+    assert.equal(exportedAssignments.status, 200);
+    assert.match(exportedAssignments.headers.get('content-type') ?? '', /text\/csv/);
+    const csvText = await exportedAssignments.text();
+    assert.match(csvText, /Assignment ID/);
+    assert.ok(csvText.includes('=1+1'));
+    assert.ok(csvText.includes("'=1+1")); // Excel formula injection is neutralized.
+    assert.ok(csvText.includes(incompleteResource.assetCode));
+    assert.ok((await db.securityAuditEvent.count({
+      where: { action: 'ASSIGNMENTS_EXPORTED', actorUserId: adminIdentity.id }
+    })) >= 1);
 
     // Employee-to-employee transfer retains custody until the new recipient accepts.
     const original = await assignmentWrite('/', both, {
