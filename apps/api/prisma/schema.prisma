@@ -48,6 +48,7 @@ model Branch {
   departments Department[]
   resources   Resource[]
   assignments Assignment[]
+  approvalRequests ApprovalRequest[]
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 
@@ -91,6 +92,8 @@ model User {
   targetEvents   SecurityAuditEvent[] @relation("AuditTarget")
   assignmentsReceived Assignment[] @relation("AssignmentRecipient")
   assignmentsIssued Assignment[] @relation("AssignmentIssuer")
+  approvalRequests ApprovalRequest[] @relation("ApprovalRequester")
+  approvalReviews ApprovalReview[] @relation("ApprovalReviewer")
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
 }
@@ -326,4 +329,112 @@ model AssignmentEvent {
   createdAt    DateTime   @default(now())
 
   @@index([assignmentId, createdAt])
+}
+
+
+// Versioned approval forms and immutable workflow snapshots.
+model ApprovalType {
+  id             String                @id @default(uuid())
+  code           String                @unique
+  name           String
+  description    String                @default("")
+  active         Boolean               @default(true)
+  currentVersion Int                   @default(1)
+  versions       ApprovalTypeVersion[]
+  requests       ApprovalRequest[]
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+}
+
+model ApprovalTypeVersion {
+  id           String            @id @default(uuid())
+  typeId       String
+  type         ApprovalType      @relation(fields: [typeId], references: [id], onDelete: Restrict)
+  version      Int
+  fields       Json              @default("[]")
+  steps        Json              @default("[]")
+  deadlineDays Int               @default(3)
+  requests     ApprovalRequest[]
+  createdAt    DateTime          @default(now())
+
+  @@unique([typeId, version])
+}
+
+enum ApprovalRequestStatus {
+  PENDING
+  CHANGES_REQUESTED
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum ApprovalReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CHANGES_REQUESTED
+  SKIPPED
+}
+
+model ApprovalCounter {
+  name       String @id
+  nextNumber Int
+}
+
+model ApprovalRequest {
+  id           String                @id @default(uuid())
+  code         String                @unique
+  typeId       String
+  type         ApprovalType          @relation(fields: [typeId], references: [id], onDelete: Restrict)
+  versionId    String
+  version      ApprovalTypeVersion   @relation(fields: [versionId], references: [id], onDelete: Restrict)
+  requesterId  String
+  requester    User                  @relation("ApprovalRequester", fields: [requesterId], references: [id], onDelete: Restrict)
+  branchId     String
+  branch       Branch                @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  title        String
+  reason       String
+  amount       Decimal?              @db.Decimal(18, 2)
+  status       ApprovalRequestStatus @default(PENDING)
+  currentStep  Int                   @default(0)
+  values       Json                   @default("{}")
+  dueAt        DateTime?
+  completedAt  DateTime?
+  reviews      ApprovalReview[]
+  events       ApprovalEvent[]
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+
+  @@index([branchId, status, createdAt])
+  @@index([requesterId, createdAt])
+  @@index([typeId, createdAt])
+}
+
+model ApprovalReview {
+  id          String               @id @default(uuid())
+  requestId   String
+  request     ApprovalRequest      @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  step        Int
+  reviewerId  String
+  reviewer    User                 @relation("ApprovalReviewer", fields: [reviewerId], references: [id], onDelete: Restrict)
+  status      ApprovalReviewStatus @default(PENDING)
+  comment     String               @default("")
+  decidedAt   DateTime?
+
+  @@unique([requestId, step, reviewerId])
+  @@index([reviewerId, status])
+}
+
+model ApprovalEvent {
+  id         String          @id @default(uuid())
+  requestId  String
+  request    ApprovalRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  actorId    String
+  actorName  String
+  action     String
+  comment    String          @default("")
+  details    Json            @default("{}")
+  createdAt  DateTime        @default(now())
+
+  @@index([requestId, createdAt])
 }
