@@ -199,3 +199,19 @@
   .as-receipt-evidence{padding:0 10px 12px 10px}
   .as-review-facts>div{font-size:11px}
 }
+
+/* Connected assignment lifecycle state styling; preserve approved palette and layout. */
+.as-status-issue-reported{color:var(--status-warning-fg);background:var(--status-warning-bg)}
+.as-status-transfer-pending{color:var(--status-blue-fg);background:var(--status-blue-bg)}
+.as-status-cancelled{color:var(--status-neutral-fg);background:var(--status-neutral-bg)}
+.as-receipt-issue_reported{color:var(--status-warning-fg);background:var(--status-warning-bg)}
+.as-receipt-return_requested,.as-receipt-transfer_pending{color:var(--status-blue-fg);background:var(--status-blue-bg)}
+.as-receipt-returned,.as-receipt-transferred{color:var(--status-neutral-fg);background:var(--status-neutral-bg)}
+.as-receipt-cancelled{color:var(--muted);background:var(--surface2)}
+.as-actions-footer>div{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.as-actions-footer{align-items:flex-start}
+.as-receipt-evidence .ui-button{justify-self:start}
+.as-return-details>.as-field{margin-bottom:14px}
+.as-create-dialog .as-asset-list{max-height:290px;overflow-y:auto;overscroll-behavior:contain}
+.as-actions-footer .ui-button{white-space:nowrap}
+@media(max-width:640px){.as-actions-footer{flex-wrap:wrap}.as-actions-footer>div{width:100%;justify-content:flex-start}}
