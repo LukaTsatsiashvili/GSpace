@@ -821,6 +821,13 @@ test('session login, CSRF, RBAC directory read and logout', { skip: !process.env
     assert.equal(newEmployeeLogin.status, 200);
     const freshEmployeeCookie = newEmployeeLogin.headers.get('set-cookie')?.split(';')[0];
     assert.ok(freshEmployeeCookie);
+    // Employee has been transferred to a different branch in the organization tests.
+    assert.equal((await approvalWrite('/', csrfCookie + '; ' + freshEmployeeCookie, makeApproval)).status, 403);
+    const moveEmployeeBack = await fetch(base + '/api/v1/admin/users/' + employee.id, {
+      method: 'PATCH', headers: { cookie: both, 'content-type': 'application/json', 'x-csrf-token': csrf.csrfToken },
+      body: JSON.stringify({ branchId: adminIdentity.branchId, departmentId: null })
+    });
+    assert.equal(moveEmployeeBack.status, 200);
     assert.equal((await approvalWrite('/', csrfCookie + '; ' + freshEmployeeCookie, makeApproval)).status, 201);
     const createdApproval = await approvalWrite('/', both, makeApproval);
     assert.equal(createdApproval.status, 201);
