@@ -1,15 +1,19 @@
 import type { Branch, Category, ResourcePayload, ResourceCondition } from './resource-api';
 
 /**
- * Downloadable CSV aligned with BulkResourceDialog.parseCsv.
- * Category/branch examples come exclusively from the authenticated catalog,
- * never from hard-coded preview records.
+ * Universal CSV: standard headers only, no example rows or Custom Fields.
+ * Category CSV: same standard headers plus the selected category's definitions.
+ * No category/branch/asset values are inserted into either template.
  */
-export function buildResourceCsvTemplate(categories: Category[], branches: Branch[], canFinance: boolean) {
-  if (!categories.length || !branches.length) {
-    throw Error('Create an active resource category and branch before downloading the template.');
+export function buildResourceCsvTemplate(
+  categories: Category[], canFinance: boolean, selectedCategoryId: string | null = null
+): string {
+  const selectedCategory = selectedCategoryId === null
+    ? null : categories.find(category => category.id === selectedCategoryId);
+  if (selectedCategoryId !== null && !selectedCategory) {
+    throw Error('Selected category is unavailable. Refresh Resources and try again.');
   }
-  const base = [
+  const standard = [
     'Name', 'Category', 'Branch', 'Condition', 'Serial number', 'Location',
     'Description', 'Resource type', 'Warranty end'
   ];
@@ -17,32 +21,11 @@ export function buildResourceCsvTemplate(categories: Category[], branches: Branc
     'Purchase price', 'Currency', 'Purchase date', 'Supplier',
     'Useful life months', 'Residual value'
   ];
-  // Prefix custom-field headers so a custom key cannot shadow a standard column.
-  const fields = [...new Set(categories.flatMap(category =>
-    category.definitions.map(field => field.key.toLowerCase())))].sort();
-  const header = [...base, ...(canFinance ? finance : []),
-    ...fields.map(key => 'custom.' + key)];
-
-  const selectedCategory = categories.find(category =>
-    !category.definitions.some(field => field.required)) ?? categories[0];
-  // This row must be completed before import: no fictitious resource is registered.
-  const row = header.map(field => {
-    switch (field) {
-      case 'Name': return '';
-      case 'Category': return selectedCategory.name;
-      case 'Branch': return branches[0].name;
-      case 'Condition': return 'Good';
-      case 'Resource type': return 'Physical Asset';
-      case 'Currency': return 'GEL';
-      default: return '';
-    }
-  });
-  const quote = (value: string) => {
-    // Keep spreadsheet applications from evaluating formulas in catalog names.
-    const escaped = /^[=+\-@\t\r]/.test(value) ? "'" + value : value;
-    return '"' + escaped.replace(/"/g, '""').replace(/[\r\n]/g, ' ') + '"';
-  };
-  return '\uFEFF' + [header, row].map(values => values.map(quote).join(',')).join('\r\n') + '\r\n';
+  const custom = (selectedCategory?.definitions ?? []).map(field => 'custom.' + field.key);
+  const headers = [...standard, ...(canFinance ? finance : []), ...custom];
+  const quote = (value: string) => '"' + value.replace(/"/g, '""') + '"';
+  // UTF-8 BOM improves Excel compatibility; only the header row is exported.
+  return '\uFEFF' + headers.map(quote).join(',') + '\r\n';
 }
 
 /** Keep downloaded template columns and the upload parser in the same tested module. */
@@ -97,7 +80,10 @@ export function parseResourceCsv(text: string, categories: Category[], branches:
     const custom: Record<string, string> = {};
     for (const def of category.definitions) {
       custom[def.key] = find(row, 'custom.' + def.key.toLowerCase()) || find(row, def.key.toLowerCase());
-      if (def.required && !custom[def.key]) throw Error('Row ' + n + ': ' + def.label + ' is required.');
+      if (def.required && !custom[def.key]) throw Error(
+        'Row ' + n + ': ' + def.label + ' is required for ' + category.name +
+        '. Download its category template to include the required Custom Fields.'
+      );
     }
     value.customFields = custom;
     value.serialNumber = find(row, 'serial number') || null;

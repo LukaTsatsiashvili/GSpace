@@ -18,6 +18,10 @@ export default function BulkResourceDialog({ close, categories, branches, canFin
   const [branchId, setBranchId] = useState(branches[0]?.id ?? '');
   const [condition, setCondition] = useState<ResourceCondition>('Good');
   const [quantity, setQuantity] = useState('5');
+  const [templateCategoryId, setTemplateCategoryId] = useState<string>('universal');
+  const selectedTemplateCategory = categories.find(item => item.id === templateCategoryId);
+  const universalLabel = 'Universal template — all categories';
+  const templateChoices = [universalLabel, ...categories.map(item => item.name)];
   const [file, setFile] = useState<File | null>(null);
   const [rows, setRows] = useState<ResourcePayload[]>([]);
   const [preview, setPreview] = useState(false);
@@ -37,12 +41,14 @@ export default function BulkResourceDialog({ close, categories, branches, canFin
   function downloadTemplate() {
     setError('');
     try {
-      const text = buildResourceCsvTemplate(categories, branches, canFinance);
+      const text = buildResourceCsvTemplate(categories, canFinance, selectedTemplateCategory?.id ?? null);
       const blob = new Blob([text], { type: 'text/csv;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = 'gspace-resources-template.csv';
+      const slug = selectedTemplateCategory?.name.trim().toLowerCase()
+        .replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-+|-+$/g, '').slice(0, 45);
+      link.download = slug ? 'gspace-resources-' + slug + '-template.csv' : 'gspace-resources-universal-template.csv';
       document.body.append(link); link.click(); link.remove();
       window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (err) {
@@ -117,12 +123,30 @@ export default function BulkResourceDialog({ close, categories, branches, canFin
         </> : <>
           <div className="bw-template-help">
             <div className="bw-template-copy">
-              <strong>Start with a ready-to-fill CSV template</strong>
-              <span>Uses active branches and categories from PostgreSQL, with all current Custom Field columns.
-                Fill in the empty Name field, add or duplicate rows, then upload the same file.</span>
+              <strong>Download a blank CSV template</strong>
+              <span>Select a universal template for multiple categories or choose one category to include its Custom Fields.
+                Both templates contain headers only — no example assets or pre-filled values.</span>
             </div>
-            <Button icon={<FileDown size={16}/>} onClick={downloadTemplate}
-              disabled={!categories.length || !branches.length}>Download template</Button>
+            <div className="bw-template-controls">
+              <label className="bw-template-label" htmlFor="bw-template-type">Template category</label>
+              <Select className="bw-template-select" label="Template category"
+                value={selectedTemplateCategory?.name ?? universalLabel}
+                options={templateChoices}
+                onChange={value => {
+                  setTemplateCategoryId(categories.find(item => item.name === value)?.id ?? 'universal');
+                  setError('');
+                }}/>
+              <Button icon={<FileDown size={16}/>} onClick={downloadTemplate}
+                disabled={!!templateCategoryId && templateCategoryId !== 'universal' && !selectedTemplateCategory}>
+                Download template
+              </Button>
+            </div>
+            <p className="bw-template-explanation">
+              {selectedTemplateCategory
+                ? 'Category template: standard columns + ' + selectedTemplateCategory.name +
+                  ' Custom Fields (' + selectedTemplateCategory.definitions.length + '). Enter the category name in each row.'
+                : 'Universal template: standard columns only. You can mix categories, but categories with required Custom Fields need a category template.'}
+            </p>
           </div>
           <input ref={fileInput} className="nw-file-input" type="file" accept=".csv"
             onChange={event => {
@@ -140,7 +164,7 @@ export default function BulkResourceDialog({ close, categories, branches, canFin
           <p className="bw-hint">Required headers: Name, Category, Branch, Condition.
             Optional: Serial number, Location, Description, Resource type, Warranty end,
             Purchase price, Currency, Purchase date, Supplier, Useful life months, Residual value,
-            and custom field columns (custom.fieldKey).</p>
+            and, for category-specific templates, Custom Fields (custom.fieldKey). Every row must include a valid Category and Branch name.</p>
         </>}
         <div className="nw-notice bw-notice"><span><ShieldCheck size={18}/></span>
           <p><strong>Administrator-managed.</strong> Validation runs on the server for each row.

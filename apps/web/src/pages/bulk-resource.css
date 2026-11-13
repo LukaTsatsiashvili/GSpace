@@ -16,3 +16,15 @@
 .bw-template-copy span{font-size:11px;line-height:1.65;color:var(--muted)}
 .bw-template-help .ui-button{flex:none;white-space:nowrap}
 @media(max-width:650px){.bw-template-help{align-items:stretch;flex-direction:column;gap:12px}.bw-template-help .ui-button{align-self:flex-start}}
+
+/* Hybrid CSV download: responsive category selector and clear empty-template guidance. */
+.bw-template-help{flex-direction:column;align-items:stretch;gap:14px}
+.bw-template-controls{display:flex;align-items:end;gap:12px;flex-wrap:wrap}
+.bw-template-controls .bw-template-select{flex:1;min-width:210px}
+.bw-template-label{display:block;width:100%;font-size:11px;font-weight:750;color:var(--text);margin-bottom:-5px}
+.bw-template-explanation{font-size:11px;color:var(--muted);line-height:1.65;margin:0;padding-top:10px;border-top:1px solid var(--border)}
+@media(max-width:650px){
+  .bw-template-controls{align-items:stretch;flex-direction:column;gap:10px}
+  .bw-template-controls .bw-template-select{width:100%;min-width:0}
+  .bw-template-controls .ui-button{align-self:flex-start}
+}

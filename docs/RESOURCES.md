@@ -16,15 +16,18 @@ Feature branch: `feature/resources-backend`, based on `GSpace-production`. Pull 
 - Financial values are returned only to `finance.view` users. Editors without `finance.edit` cannot change or erase them.
 - A permission-checked, audited CSV export serves selected resource rows (maximum 500), with spreadsheet-formula escaping.
 
-## CSV template and import
+## Hybrid CSV template and import
 
-1. Open **Resources → Bulk create → CSV spreadsheet import**.
-2. Choose **Download template**. The CSV is generated in the browser from the authenticated `/catalog` response; no fabricated branches or categories are written.
-3. The file includes required columns `Name`, `Category`, `Branch`, `Condition`, optional asset details, permitted Finance columns, and a `custom.<fieldKey>` column for every currently configured category-specific field.
-4. It starts with one sample row containing a **real active category and branch**. Complete the empty `Name` and all required custom fields for the selected category, or duplicate the row for additional assets.
-5. In Excel, save back to **CSV UTF-8 (comma-delimited)**, then upload the same file. A batch accepts 1–100 records; all rows are validated on the backend before creation.
+From **Resources → Bulk Create → CSV spreadsheet import**, choose a template category:
 
-Template generation and parsing share a pure tested module. The CSV parser supports quoted values, commas, Georgian characters and protected formula-prefixed category/branch names. Exported records and uploaded templates are different features: resource export remains permission-controlled and audited.
+- **Universal template (default):** downloads a completely empty UTF-8 CSV containing only standard field headers. It supports multiple categories in the same import, provided each row meets its selected category's validation rules. It contains **no Custom Fields** and no sample rows.
+- **Category template:** select an active category from PostgreSQL, then download a completely empty CSV containing standard headers plus **only that category's** Custom Field columns (each prefixed \`custom.\`). It does not pre-fill the Category or Branch value. Users fill those columns themselves.
+
+Both variants include optional Finance columns only when the user has Finance editing permission. The backend still validates every row: required Custom Fields must be supplied even in a universal import. For a category with required fields, use its category template (or register the resource through Add Resource). The importer shows a category-template guidance message for missing required values. **Validation is never bypassed or deferred to Edit Resource.**
+
+To import: open the downloaded file in Excel, enter one or more asset rows with exact active Category and Branch names, and save as CSV UTF-8 (comma-delimited) before uploading. A batch supports 1–100 rows and receives new permanent Asset IDs after confirmation. There are no fabricated catalog values or example records in either template.
+
+The frontend CSV template generator and parser share a pure module and include automated checks for blank templates, dynamic custom headers, permissions, required fields, Unicode names, and multi-category imports.
 
 ## Shared notifications and Resources details UI
 
