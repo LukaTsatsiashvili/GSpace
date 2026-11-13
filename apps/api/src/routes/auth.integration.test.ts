@@ -769,6 +769,122 @@ test('session login, CSRF, RBAC directory read and logout', { skip: !process.env
       where: { action: 'AUTH_PASSWORD_CHANGED', actorUserId: employee.id }
     })) >= 1);
 
+
+    // Requests & Approvals: versioned dynamic fields, ANY/ALL levels, real reviewers and immutable history.
+    const approvalWrite = (suffix: string, cookies: string, body: object, method: 'POST' | 'PUT' = 'POST') =>
+      fetch(base + '/api/v1/approvals' + suffix, {
+        method, headers: { cookie: cookies, 'content-type': 'application/json', 'x-csrf-token': csrf.csrfToken },
+        body: JSON.stringify(body)
+      });
+    assert.equal((await fetch(base + '/api/v1/approvals/types')).status, 401);
+    const secondReviewer = await db.user.create({ data: {
+      email: 'test-approval-reviewer@example.test', fullName: 'Review Test Peer',
+      roleId: scopedRole.id, branchId: adminIdentity.branchId, active: true,
+      credential: { create: { passwordHash: await hashPassword(password) } }
+    } });
+    const reviewerLogin = await fetch(base + '/api/v1/auth/login', {
+      method: 'POST', headers: { cookie: csrfCookie, 'content-type': 'application/json', 'x-csrf-token': csrf.csrfToken },
+      body: JSON.stringify({ email: secondReviewer.email, password })
+    });
+    assert.equal(reviewerLogin.status, 200);
+    const reviewerSession = reviewerLogin.headers.get('set-cookie')?.split(';')[0];
+    assert.ok(reviewerSession);
+    const reviewerCookies = csrfCookie + '; ' + reviewerSession;
+    const approvalConfig = {
+      code: 'CI_APPROVAL', name: 'CI equipment approval', description: 'Integration test',
+      active: true, deadlineDays: 3,
+      fields: [
+        { key: 'justification', label: 'Justification details', type: 'text', required: true },
+        { key: 'options', label: 'Equipment options', type: 'multi_select', required: false,
+          options: ['Laptop', 'Monitor'] }
+      ],
+      steps: [
+        { mode: 'ANY', targets: [{ kind: 'USER', id: scopedManager.id }, { kind: 'USER', id: secondReviewer.id }] },
+        { mode: 'ALL', targets: [{ kind: 'USER', id: scopedManager.id }, { kind: 'USER', id: secondReviewer.id }] }
+      ]
+    };
+    assert.equal((await approvalWrite('/types', managerCookies, approvalConfig)).status, 403);
+    const approvedType = await approvalWrite('/types', both, approvalConfig);
+    assert.equal(approvedType.status, 201);
+    const typeId = (await approvedType.json() as { id: string }).id;
+    const makeApproval = {
+      typeId, branchId: adminIdentity.branchId, title: 'New equipment request',
+      reason: 'Business equipment needed', amount: 1250,
+      values: { justification: 'Need a monitor', options: ['Monitor'] }
+    };
+    assert.equal((await approvalWrite('/', both,
+      { ...makeApproval, values: { options: ['Monitor'] } })).status, 400);
+    assert.equal((await approvalWrite('/', both,
+      { ...makeApproval, values: { justification: 'Need a monitor', options: ['Unknown'] } })).status, 400);
+    assert.equal((await approvalWrite('/', employeeCookies, makeApproval)).status, 201);
+    const createdApproval = await approvalWrite('/', both, makeApproval);
+    assert.equal(createdApproval.status, 201);
+    const approvalCode = (await createdApproval.json() as { code: string }).code;
+    const approval = await db.approvalRequest.findUniqueOrThrow({ where: { code: approvalCode } });
+    assert.equal(approval.status, 'PENDING');
+    assert.equal((await approvalWrite('/' + approval.id + '/decision', both,
+      { decision: 'APPROVED', comment: '' })).status, 403);
+    assert.equal((await fetch(base + '/api/v1/approvals/' + approval.id,
+      { headers: { cookie: employeeCookies } })).status, 404);
+    assert.equal((await approvalWrite('/' + approval.id + '/decision', managerCookies,
+      { decision: 'APPROVED', comment: 'First approval' })).status, 200);
+    const afterFirst = await db.approvalRequest.findUniqueOrThrow({ where: { id: approval.id } });
+    assert.equal(afterFirst.currentStep, 1);
+    const skippedPeer = await db.approvalReview.findFirstOrThrow({
+      where: { requestId: approval.id, step: 0, reviewerId: secondReviewer.id }
+    });
+    assert.equal(skippedPeer.status, 'SKIPPED');
+    assert.equal((await approvalWrite('/' + approval.id + '/decision', reviewerCookies,
+      { decision: 'APPROVED', comment: '' })).status, 200);
+    assert.equal((await db.approvalRequest.findUniqueOrThrow({ where: { id: approval.id } })).status, 'PENDING');
+    assert.equal((await approvalWrite('/' + approval.id + '/decision', managerCookies,
+      { decision: 'APPROVED', comment: '' })).status, 200);
+    assert.equal((await db.approvalRequest.findUniqueOrThrow({ where: { id: approval.id } })).status, 'APPROVED');
+    assert.equal((await approvalWrite('/' + approval.id + '/decision', managerCookies,
+      { decision: 'APPROVED', comment: '' })).status, 409);
+    assert.equal((await approvalWrite('/' + approval.id + '/cancel', both, {})).status, 409);
+    assert.ok((await db.approvalEvent.count({ where: { requestId: approval.id } })) >= 4);
+    const updateApprovalConfig = await approvalWrite('/types/' + typeId, both,
+      { ...approvalConfig, description: 'Updated without touching existing requests' }, 'PUT');
+    assert.equal(updateApprovalConfig.status, 200);
+    assert.equal((await db.approvalTypeVersion.count({ where: { typeId } })), 2);
+    assert.equal((await db.approvalRequest.findUniqueOrThrow({
+      where: { id: approval.id }, include: { version: true }
+    })).version.version, 1);
+    const secondApproval = await approvalWrite('/', both, makeApproval);
+    assert.equal(secondApproval.status, 201);
+    const secondApprovalCode = (await secondApproval.json() as { code: string }).code;
+    const secondRequest = await db.approvalRequest.findUniqueOrThrow({
+      where: { code: secondApprovalCode }, include: { version: true }
+    });
+    assert.equal(secondRequest.version.version, 2);
+    assert.equal((await approvalWrite('/' + secondRequest.id + '/decision', managerCookies,
+      { decision: 'CHANGES_REQUESTED', comment: '' })).status, 400);
+    assert.equal((await approvalWrite('/' + secondRequest.id + '/decision', managerCookies,
+      { decision: 'CHANGES_REQUESTED', comment: 'Please clarify' })).status, 200);
+    assert.equal((await approvalWrite('/' + secondRequest.id + '/resubmit', both, {
+      reason: 'Clarified information', values: { justification: 'More detail', options: ['Laptop'] }
+    })).status, 200);
+    assert.equal((await db.approvalRequest.findUniqueOrThrow({
+      where: { id: secondRequest.id }
+    })).status, 'PENDING');
+    assert.equal((await approvalWrite('/' + secondRequest.id + '/decision', managerCookies,
+      { decision: 'REJECTED', comment: 'Not available' })).status, 200);
+    assert.equal((await db.approvalRequest.findUniqueOrThrow({
+      where: { id: secondRequest.id }
+    })).status, 'REJECTED');
+    const exportedApprovals = await approvalWrite('/export/csv', both, {
+      requestIds: [approval.id, secondRequest.id]
+    });
+    assert.equal(exportedApprovals.status, 200);
+    const exportedCsv = await exportedApprovals.text();
+    assert.ok(exportedCsv.includes(approvalCode) && exportedCsv.includes(secondApprovalCode));
+    assert.equal((await approvalWrite('/export/csv', managerCookies,
+      { requestIds: [approval.id] })).status, 403);
+    assert.ok((await db.securityAuditEvent.count({
+      where: { action: 'APPROVAL_REQUESTS_EXPORTED' }
+    })) >= 1);
+
     const logout = await fetch(base + '/api/v1/auth/logout', {
       method: 'POST', headers: { cookie: both, 'content-type': 'application/json', 'x-csrf-token': csrf.csrfToken }, body: '{}'
     });
