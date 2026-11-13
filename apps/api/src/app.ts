@@ -8,6 +8,7 @@ import adminUsersRouter from './routes/admin-users.js';
 import adminRolesRouter from './routes/admin-roles.js';
 import adminOrganizationRouter from './routes/admin-organization.js';
 import resourcesRouter from './routes/resources.js';
+import assignmentsRouter from './routes/assignments.js';
 import { csrfGuard } from './security/auth.js';
 
 export const app = express();
@@ -29,6 +30,7 @@ app.use('/api/v1/admin', adminRolesRouter);
 app.use('/api/v1/admin', adminOrganizationRouter);
 app.use('/api/v1/admin', adminRouter);
 app.use('/api/v1/resources', resourcesRouter);
+app.use('/api/v1/assignments', assignmentsRouter);
 app.use('/api', (_req, res) => {
   res.status(404).json({ error: { code: 'NOT_FOUND', message: 'API endpoint not found' } });
 });
