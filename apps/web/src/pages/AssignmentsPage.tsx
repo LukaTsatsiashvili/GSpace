@@ -4,7 +4,7 @@ import { Badge, Button, Card, Checkbox, Input, PageHeader, SearchInput, SectionT
 import { useAuth } from '../auth/AuthGate';
 import { useToast } from '../components/toast';
 import { asFilePayload } from './resource-api';
-import { assignmentsApi, type Assignment, type AssignmentAsset, type AssignmentStatus, type AvailableAsset, type Lookups, type Receipt, type Summary } from './assignments-api';
+import { assignmentsApi, downloadEvidence, type Assignment, type AssignmentAsset, type AssignmentStatus, type AvailableAsset, type Lookups, type Receipt, type Summary } from './assignments-api';
 import './assignments.css';
 
 type Tab = 'All assignments' | 'Pending' | 'Active' | 'Returns' | 'History';
@@ -250,6 +250,7 @@ function AssignmentDrawer({ assignment, lookups, userId, close, done }: {
   assignment: Assignment; lookups: Lookups; userId: string; close: () => void; done: (msg: string) => void
 }) {
   const [action, setAction] = useState<Action | null>(null);
+  const toast = useToast();
   const canManage = lookups.canManage && (lookups.branches.some(x => x.id === assignment.branchId));
   const canReceive = assignment.recipientId === userId && assignment.assets.some(item => item.receipt === 'PENDING');
   const canRequest = (canManage || assignment.recipientId === userId) &&
@@ -271,7 +272,9 @@ function AssignmentDrawer({ assignment, lookups, userId, close, done }: {
           {assignment.assets.map(item => <div className="as-assigned-asset" key={item.itemId}>
             <span className="as-box-icon"><Box size={17}/></span>
             <div><strong>{item.name}</strong><span>{item.id} · Issue condition: {item.condition}
-              {item.returnCondition && ' · Return: ' + item.returnCondition}</span></div>
+              {item.returnCondition && ' · Return: ' + item.returnCondition}</span>
+              {item.evidence && <Button variant="quiet" onClick={() => void downloadEvidence(assignment.id, item.itemId, item.evidence!.filename)
+                .catch(error => toast.error(errorText(error)))}>Download receipt photo</Button>}</div>
             <span className={'as-receipt as-receipt-' + item.receipt.toLowerCase()}>{item.receipt.replace(/_/g, ' ')}</span>
           </div>)}</div></section>
         <section className="as-drawer-section"><h3>Custody workflow</h3><div className="as-workflow">
