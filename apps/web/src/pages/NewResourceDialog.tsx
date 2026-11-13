@@ -284,7 +284,7 @@ export default function NewResourceDialog({ close, branches, categories, resourc
               <p className="nw-error" role="alert">Unsupported attachment type. Use PDF, image, CSV, text or Office OpenXML files.</p>}
           </> : resource && <ResourceDocuments resource={resource} context="edit"
             canManage={user.role.permissions.includes('assets.edit') && !pending}
-            onChanged={updated => onDocumentsChange?.(updated)}/>
+            onChanged={updated => onDocumentsChange?.(updated)}/>}
           <Notice icon={<ShieldCheck size={18}/>}>
             Documents are stored in the database, not as public files. Downloads require authentication and branch access.
           </Notice>
