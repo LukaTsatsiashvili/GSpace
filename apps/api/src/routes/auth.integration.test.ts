@@ -332,6 +332,21 @@ test('session login, CSRF, RBAC directory read and logout', { skip: !process.env
     assert.equal(incompleteResource.category, 'Test New Equipment');
     assert.equal(incompleteResource.status, 'AVAILABLE');
 
+    // Document uploads operate independently of incomplete required custom fields.
+    const documentsBeforeSpecifications = await resourceApi(
+      '/' + incompleteResource.id + '/documents', 'POST', {
+        documents: [{ filename: 'post-registration.pdf', mimeType: 'application/pdf',
+          base64: Buffer.from('%PDF-1.7\nuploaded before specifications').toString('base64') }]
+      }
+    );
+    assert.equal(documentsBeforeSpecifications.status, 201);
+    const incompletelyRegistered = await documentsBeforeSpecifications.json() as {
+      resource: { customFields: Record<string, string>; documents: { filename: string }[] }
+    };
+    assert.deepEqual(incompletelyRegistered.resource.customFields, {});
+    assert.equal(incompletelyRegistered.resource.documents.length, 1);
+
+
     const stillRequiredOnEdit = await resourceApi('/' + incompleteResource.id, 'PATCH', {
       ...resourceTemplate, name: 'Completed Later', category: 'Test New Equipment',
       customFields: {}, status: 'AVAILABLE'
