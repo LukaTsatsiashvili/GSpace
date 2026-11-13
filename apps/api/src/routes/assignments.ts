@@ -202,7 +202,7 @@ router.get('/lookups', run(async (_req, res) => {
     authorized ? db.resource.findMany({ where: { ...where, status: 'AVAILABLE', branch: { active: true } },
       select: { id: true, assetCode: true, name: true, condition: true, branchId: true },
       orderBy: { assetCode: 'asc' }, take: 500 }) : Promise.resolve([]),
-    authorized ? db.branch.findMany({ where: { ...where, active: true },
+    authorized ? db.branch.findMany({ where: { ...(isCentral(actor) ? {} : { id: actor.branchId }), active: true },
       select: { id: true, name: true } }) : Promise.resolve([])
   ]);
   res.json({ recipients: people, availableAssets: resources, branches, canManage: authorized });
