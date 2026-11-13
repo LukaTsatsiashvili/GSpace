@@ -464,6 +464,199 @@ test('session login, CSRF, RBAC directory read and logout', { skip: !process.env
     const employeeCookie = loginEmployee.headers.get('set-cookie')?.split(';')[0];
     assert.ok(employeeCookie);
     const employeeCookies = csrfCookie + '; ' + employeeCookie;
+    // Persisted assignments: issue, recipient acknowledgement, and verified return.
+    const assignmentWrite = (suffix: string, cookies: string, body: object) =>
+      fetch(base + '/api/v1/assignments' + suffix, {
+        method: 'POST',
+        headers: { cookie: cookies, 'content-type': 'application/json', 'x-csrf-token': csrf.csrfToken },
+        body: JSON.stringify(body)
+      });
+    assert.equal((await fetch(base + '/api/v1/assignments')).status, 401);
+    const peerLookups = await fetch(base + '/api/v1/assignments/lookups', { headers: { cookie: employeeCookies } });
+    const peers = await peerLookups.json() as { recipients: { id: string }[]; availableAssets: unknown[] };
+    assert.ok(peers.recipients.some(p => p.id === adminIdentity.id));
+    assert.equal(peers.availableAssets.length, 0);
+
+    // Regression: BranchManager has assignments.manage and a single-branch scope.
+    // A Branch lookup must filter by Branch.id, not Resource/User.branchId.
+    const scopedRole = await db.role.findUniqueOrThrow({ where: { key: 'BRANCH_MANAGER' } });
+    const scopedManager = await db.user.create({
+      data: {
+        email: 'test-assignment-branch-manager@example.test',
+        fullName: 'Assignment Branch Manager', active: true,
+        roleId: scopedRole.id, branchId: adminIdentity.branchId,
+        credential: { create: { passwordHash: await hashPassword(password) } }
+      }
+    });
+    const managerLogin = await fetch(base + '/api/v1/auth/login', {
+      method: 'POST',
+      headers: { cookie: csrfCookie, 'content-type': 'application/json', 'x-csrf-token': csrf.csrfToken },
+      body: JSON.stringify({ email: scopedManager.email, password })
+    });
+    assert.equal(managerLogin.status, 200);
+    const managerSessionCookie = managerLogin.headers.get('set-cookie')?.split(';')[0];
+    assert.ok(managerSessionCookie);
+    const managerCookies = csrfCookie + '; ' + managerSessionCookie;
+    const managerLookups = await fetch(base + '/api/v1/assignments/lookups', {
+      headers: { cookie: managerCookies }
+    });
+    assert.equal(managerLookups.status, 200);
+    const scopedLookups = await managerLookups.json() as {
+      canManage: boolean;
+      recipients: { branchId: string }[];
+      availableAssets: { branchId: string }[];
+      branches: { id: string }[]
+    };
+    assert.equal(scopedLookups.canManage, true);
+    assert.deepEqual(scopedLookups.branches.map(value => value.id), [adminIdentity.branchId]);
+    assert.ok(scopedLookups.recipients.every(value => value.branchId === adminIdentity.branchId));
+    assert.ok(scopedLookups.availableAssets.every(value => value.branchId === adminIdentity.branchId));
+    const deniedIssue = await assignmentWrite('/', employeeCookies, {
+      recipientId: employee.id, resourceIds: [incompleteResource.id], dueAt: null, notes: ''
+    });
+    assert.equal(deniedIssue.status, 403);
+    const createdAssignment = await assignmentWrite('/', both, {
+      recipientId: employee.id, resourceIds: [incompleteResource.id], dueAt: null, notes: '=1+1'
+    });
+    assert.equal(createdAssignment.status, 201);
+    const assignmentId = (await createdAssignment.json() as { id: string }).id;
+    const item = await db.assignmentItem.findFirstOrThrow({ where: { assignmentId } });
+    assert.equal((await db.resource.findUniqueOrThrow({ where: { id: incompleteResource.id } })).status, 'ASSIGNED');
+    // Resources must reflect the recipient immediately, without inventing acceptance.
+    const assignedResource = await fetch(base + '/api/v1/resources/' + incompleteResource.id,
+      { headers: { cookie: both } });
+    assert.equal(assignedResource.status, 200);
+    const assignee = (await assignedResource.json() as {
+      resource: { assignedTo: { userId: string; userName: string; itemStatus: string } }
+    }).resource.assignedTo;
+    assert.equal(assignee.userId, employee.id);
+    assert.equal(assignee.itemStatus, 'PENDING');
+    const assignedList = await fetch(base + '/api/v1/resources', { headers: { cookie: both } });
+    const assignedListData = await assignedList.json() as {
+      resources: { id: string; assignedTo: { userId: string } | null }[]
+    };
+    assert.equal(assignedListData.resources.find(resource => resource.id === incompleteResource.id)?.assignedTo?.userId, employee.id);
+    const earlyHistory = await fetch(base + '/api/v1/resources/' + incompleteResource.id + '/assignments',
+      { headers: { cookie: both } });
+    assert.equal(earlyHistory.status, 200);
+    const earlyHistoryData = await earlyHistory.json() as {
+      current: { userId: string }; assignments: { assignmentCode: string; status: string }[]
+    };
+    assert.equal(earlyHistoryData.current.userId, employee.id);
+    assert.equal(earlyHistoryData.assignments[0]?.status, 'PENDING');
+    assert.equal((await assignmentWrite('/', both, {
+      recipientId: employee.id, resourceIds: [incompleteResource.id], dueAt: null, notes: ''
+    })).status, 409);
+    assert.equal((await assignmentWrite('/' + assignmentId + '/receipt', both, {
+      decisions: [{ itemId: item.id, decision: 'ACCEPT', notes: '' }]
+    })).status, 403);
+    assert.equal((await assignmentWrite('/' + assignmentId + '/receipt', employeeCookies, {
+      decisions: [{ itemId: item.id, decision: 'REPORT_ISSUE',
+        damageReported: true, notes: 'Damaged item reported' }]
+    })).status, 400);
+    const tinyPng = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+XJioAAAAASUVORK5CYII=';
+    assert.equal((await assignmentWrite('/' + assignmentId + '/receipt', employeeCookies, {
+      decisions: [{ itemId: item.id, decision: 'ACCEPT', notes: 'Confirmed in test',
+        evidence: { filename: 'receipt.png', mimeType: 'image/png', base64: tinyPng } }]
+    })).status, 200);
+    assert.equal((await fetch(base + '/api/v1/assignments/' + assignmentId +
+      '/items/' + item.id + '/evidence', { headers: { cookie: employeeCookies } })).status, 200);
+    assert.equal((await assignmentWrite('/' + assignmentId + '/receipt', employeeCookies, {
+      decisions: [{ itemId: item.id, decision: 'ACCEPT', notes: 'Duplicate' }]
+    })).status, 409);
+    assert.equal((await assignmentWrite('/' + assignmentId + '/returns/request', employeeCookies, {
+      itemIds: [item.id]
+    })).status, 200);
+    assert.equal((await assignmentWrite('/' + assignmentId + '/returns/verify', employeeCookies, {
+      items: [{ itemId: item.id, condition: 'Good' }]
+    })).status, 403);
+    assert.equal((await assignmentWrite('/' + assignmentId + '/returns/verify', both, {
+      items: [{ itemId: item.id, condition: 'Good' }]
+    })).status, 200);
+    assert.equal((await db.resource.findUniqueOrThrow({ where: { id: incompleteResource.id } })).status, 'AVAILABLE');
+    const returnedHistory = await fetch(base + '/api/v1/resources/' + incompleteResource.id + '/assignments',
+      { headers: { cookie: both } });
+    const returnedResult = await returnedHistory.json() as {
+      current: null | { userId: string }; assignments: { status: string }[]
+    };
+    assert.equal(returnedResult.current, null);
+    assert.equal(returnedResult.assignments[0]?.status, 'RETURNED');
+    assert.equal((await resourceApi('/' + incompleteResource.id, 'DELETE', {})).status, 409);
+    const completed = await fetch(base + '/api/v1/assignments/' + assignmentId,
+      { headers: { cookie: both } });
+    assert.equal((await completed.json() as { assignment: { status: string } }).assignment.status, 'Completed');
+
+    // Export is real CSV, limited to server-authorized handovers and audited.
+    assert.equal((await assignmentWrite('/export', employeeCookies, { ids: [assignmentId] })).status, 403);
+    assert.equal((await assignmentWrite('/export', managerCookies, { ids: [assignmentId] })).status, 403);
+    assert.equal((await assignmentWrite('/export', both, { ids: [assignmentId, assignmentId] })).status, 400);
+    const exportedAssignments = await assignmentWrite('/export', both, { ids: [assignmentId] });
+    assert.equal(exportedAssignments.status, 200);
+    assert.match(exportedAssignments.headers.get('content-type') ?? '', /text\/csv/);
+    const csvText = await exportedAssignments.text();
+    assert.match(csvText, /Assignment ID/);
+    assert.ok(csvText.includes('=1+1'));
+    assert.ok(csvText.includes("'=1+1")); // Excel formula injection is neutralized.
+    assert.ok(csvText.includes(incompleteResource.assetCode));
+    assert.ok((await db.securityAuditEvent.count({
+      where: { action: 'ASSIGNMENTS_EXPORTED', actorUserId: adminIdentity.id }
+    })) >= 1);
+
+    // Employee-to-employee transfer retains custody until the new recipient accepts.
+    const original = await assignmentWrite('/', both, {
+      recipientId: employee.id, resourceIds: [incompleteResource.id], dueAt: null, notes: 'Transfer source'
+    });
+    assert.equal(original.status, 201);
+    const originalId = (await original.json() as { id: string }).id;
+    const originalItem = await db.assignmentItem.findFirstOrThrow({ where: { assignmentId: originalId } });
+    assert.equal((await assignmentWrite('/' + originalId + '/receipt', employeeCookies, {
+      decisions: [{ itemId: originalItem.id, decision: 'ACCEPT', notes: '' }]
+    })).status, 200);
+    const beginTransfer = () => assignmentWrite('/' + originalId + '/transfers', both, {
+      recipientId: adminIdentity.id, itemIds: [originalItem.id], dueAt: null, notes: 'To colleague'
+    });
+    const firstTransfer = await beginTransfer();
+    assert.equal(firstTransfer.status, 201);
+    const transferId = (await firstTransfer.json() as { id: string }).id;
+    assert.equal((await db.assignmentItem.findUniqueOrThrow({ where: { id: originalItem.id } })).status, 'TRANSFER_PENDING');
+    const transferPendingResource = await fetch(base + '/api/v1/resources/' + incompleteResource.id,
+      { headers: { cookie: both } });
+    const transferPendingOwner = (await transferPendingResource.json() as {
+      resource: { assignedTo: { userId: string; pendingRecipientName: string | null } }
+    }).resource.assignedTo;
+    assert.equal(transferPendingOwner.userId, employee.id);
+    assert.equal(transferPendingOwner.pendingRecipientName, adminIdentity.fullName);
+    assert.equal((await fetch(base + '/api/v1/assignments/' + transferId,
+      { headers: { cookie: employeeCookies } })).status, 200);
+    assert.equal((await assignmentWrite('/' + transferId + '/transfers/cancel', employeeCookies, {})).status, 200);
+    assert.equal((await db.assignmentItem.findUniqueOrThrow({ where: { id: originalItem.id } })).status, 'ACCEPTED');
+    const secondTransfer = await beginTransfer();
+    assert.equal(secondTransfer.status, 201);
+    const secondTransferId = (await secondTransfer.json() as { id: string }).id;
+    const nextItem = await db.assignmentItem.findFirstOrThrow({ where: { assignmentId: secondTransferId } });
+    assert.equal((await assignmentWrite('/' + secondTransferId + '/receipt', employeeCookies, {
+      decisions: [{ itemId: nextItem.id, decision: 'ACCEPT', notes: '' }]
+    })).status, 403);
+    assert.equal((await assignmentWrite('/' + secondTransferId + '/receipt', both, {
+      decisions: [{ itemId: nextItem.id, decision: 'ACCEPT', notes: '' }]
+    })).status, 200);
+    assert.equal((await db.assignmentItem.findUniqueOrThrow({ where: { id: originalItem.id } })).status, 'TRANSFERRED');
+    const acceptedTransferResource = await fetch(base + '/api/v1/resources/' + incompleteResource.id,
+      { headers: { cookie: both } });
+    const acceptedOwner = (await acceptedTransferResource.json() as {
+      resource: { assignedTo: { userId: string; itemStatus: string } }
+    }).resource.assignedTo;
+    assert.equal(acceptedOwner.userId, adminIdentity.id);
+    assert.equal(acceptedOwner.itemStatus, 'ACCEPTED');
+    assert.equal((await assignmentWrite('/' + secondTransferId + '/returns/request', both, {
+      itemIds: [nextItem.id]
+    })).status, 200);
+    assert.equal((await assignmentWrite('/' + secondTransferId + '/returns/verify', both, {
+      items: [{ itemId: nextItem.id, condition: 'Excellent' }]
+    })).status, 200);
+    assert.equal((await db.resource.findUniqueOrThrow({ where: { id: incompleteResource.id } })).status, 'AVAILABLE');
+    assert.ok((await db.securityAuditEvent.count({ where: { action: 'ASSIGNMENT_TRANSFER_STARTED' } })) >= 1);
+
     const employeeRead = await fetch(base + '/api/v1/admin/organization', {
       headers: { cookie: employeeCookies }
     });
@@ -498,6 +691,19 @@ test('session login, CSRF, RBAC directory read and logout', { skip: !process.env
       name: 'Test Organization Branch', city: 'Tbilisi', managerId: null, active: true
     });
     assert.equal(reactivateBranch.status, 200);
+
+    // The resource handover history API must respect the same branch boundary
+    // as the resource register and must not leak another branch's personnel.
+    const otherBranchCreated = await resourceApi('/', 'POST', {
+      ...resourceTemplate, name: 'Second Branch Integration Laptop',
+      branchId, serialNumber: 'CROSS-BRANCH-RESOURCE', documents: []
+    });
+    assert.equal(otherBranchCreated.status, 201);
+    const otherBranchResource = await otherBranchCreated.json() as { id: string };
+    assert.equal((await fetch(base + '/api/v1/resources/' + otherBranchResource.id + '/assignments',
+      { headers: { cookie: managerCookies } })).status, 404);
+    assert.equal((await fetch(base + '/api/v1/resources/' + otherBranchResource.id,
+      { headers: { cookie: managerCookies } })).status, 404);
 
     const transferEmployee = await fetch(base + '/api/v1/admin/users/' + employee.id, {
       method: 'PATCH', headers: {

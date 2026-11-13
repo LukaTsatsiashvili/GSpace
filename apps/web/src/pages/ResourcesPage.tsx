@@ -8,6 +8,7 @@ import { useAuth } from '../auth/AuthGate';
 import { useToast } from '../components/toast';
 import NewResourceDialog from './NewResourceDialog';
 import ResourceDocuments from './ResourceDocuments';
+import ResourceAssignments, { receiptLabel } from './ResourceAssignments';
 import BulkResourceDialog from './BulkResourceDialog';
 import ResourceCategoriesDialog from './ResourceCategoriesDialog';
 import {
@@ -49,6 +50,14 @@ function StatusPill({ status }: { status: ResourceStatus }) {
   const label = labels[status];
   return <span className={'rs-status ' + label.toLowerCase().replace(/\s+/g, '-')}>
     <span/>{label}</span>;
+}
+function AssignedEmployee({ resource }: { resource: ResourceRecord }) {
+  if (!resource.assignedTo) return <span className="rs-muted">—</span>;
+  const assignee = resource.assignedTo;
+  return <div className="rs-assignee-cell"><strong>{assignee.userName}</strong>
+    <small>{receiptLabel(assignee.itemStatus)}</small>
+    {assignee.pendingRecipientName && <small>To {assignee.pendingRecipientName} · pending</small>}
+  </div>;
 }
 function auditFileLabel(entry: AuditEntry): string | null {
   const source = entry.action === 'DOCUMENT_DELETED' ? entry.before : entry.after;
@@ -143,6 +152,10 @@ function ResourceDrawer({ resource, categories, close, canEdit, canDelete, onEdi
               {detail('Resource type', resource.resourceType)}
               {detail('Condition', resource.condition)}
               {detail('Branch', resource.branch)}
+              {resource.assignedTo && detail('Assigned to', <div className="rs-assignee-cell">
+                <strong>{resource.assignedTo.userName}</strong>
+                <small>{receiptLabel(resource.assignedTo.itemStatus)}</small>
+              </div>)}
               {detail('Location', resource.location || '—')}
               {detail('Registered', formatDate(resource.createdAt))}
               {detail('Warranty until', formatDate(resource.warrantyEnd))}
@@ -181,9 +194,10 @@ function ResourceDrawer({ resource, categories, close, canEdit, canDelete, onEdi
             <span>{formatDate(event.createdAt)} · {event.actorName}</span>
           </li>)}</ol> : !auditError && <p className="rs-muted">No audit history to display.</p>}
         </div>}
-        {(tab === 'Assignments' || tab === 'Maintenance') && <div className="rs-tab-empty">
-          <ClipboardList size={25}/><strong>{tab}</strong>
-          <p>Real {tab.toLowerCase()} will appear after that workflow's backend is connected.
+        {tab === 'Assignments' && <ResourceAssignments resourceId={resource.id}/>}
+        {tab === 'Maintenance' && <div className="rs-tab-empty">
+          <ClipboardList size={25}/><strong>Maintenance</strong>
+          <p>Real maintenance events will appear after the Maintenance workflow's backend is connected.
             No demonstration events are shown.</p>
         </div>}
         {error && <p className="rs-error" role="alert">{error}</p>}
@@ -332,7 +346,7 @@ export default function ResourcesPage() {
                 <div><strong>{resource.name}</strong><small>{resource.assetCode}</small></div></div></td>
               <td>{resource.category}</td><td><div className="rs-location-cell">{resource.branch}
                 <small>{resource.location || '—'}</small></div></td>
-              <td>—</td><td>{resource.condition}</td><td><StatusPill status={resource.status}/></td>
+              <td><AssignedEmployee resource={resource}/></td><td>{resource.condition}</td><td><StatusPill status={resource.status}/></td>
               <td className="rs-row-action"><ArrowLeftRight size={17}/></td>
             </tr>;
           })}</tbody></table></div> :
@@ -342,6 +356,8 @@ export default function ResourcesPage() {
               <div className="rs-resource-card-head"><span className="rs-thumb"><Icon size={23}/></span>
                 <StatusPill status={resource.status}/></div>
               <h3>{resource.name}</h3><span>{resource.assetCode} · {resource.category}</span>
+              {resource.assignedTo && <div className="rs-card-assignee">Assigned to: {resource.assignedTo.userName}
+                <small>{receiptLabel(resource.assignedTo.itemStatus)}</small></div>}
               <div className="rs-resource-card-foot"><span>{resource.branch}</span><span>{resource.condition}</span></div>
             </button>;
           })}</div>}

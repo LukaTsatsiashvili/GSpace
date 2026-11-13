@@ -3,6 +3,7 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import { z } from 'zod';
 import { db } from '../db.js';
 import { canAccessBranch } from '../security/access-policy.js';
+import { currentCustodyByResource, resourceAssignmentHistory, type ResourceCustody } from './resource-custody.js';
 import { principal, requireAuth, requirePermission, type AuthPrincipal } from '../security/auth.js';
 
 const router = Router();
@@ -69,7 +70,7 @@ const include = {
   documents: { select: { id: true, filename: true, mimeType: true, byteSize: true, createdAt: true }, orderBy: { createdAt: 'asc' } }
 } satisfies Prisma.ResourceInclude;
 type ResourceRow = Prisma.ResourceGetPayload<{ include: typeof include }>;
-function serialize(row: ResourceRow, actor: AuthPrincipal) {
+function serialize(row: ResourceRow, actor: AuthPrincipal, assignedTo: ResourceCustody | null = null) {
   const finance = actor.permissions.includes('finance.view');
   return {
     id: row.id, assetCode: row.assetCode, name: row.name, category: row.category,
@@ -77,6 +78,7 @@ function serialize(row: ResourceRow, actor: AuthPrincipal) {
     branchId: row.branchId, branch: row.branch.name, location: row.location,
     serialNumber: row.serialNumber, description: row.description, warrantyEnd: row.warrantyEnd,
     customFields: row.customFields, documents: row.documents,
+    assignedTo: row.status === 'ASSIGNED' ? assignedTo : null,
     createdAt: row.createdAt, updatedAt: row.updatedAt,
     ...(finance ? {
       purchasePrice: row.purchasePrice?.toString() ?? null, currency: row.currency,
@@ -236,8 +238,9 @@ router.get('/', run(async (req, res) => {
   const counts = Object.fromEntries(grouped.map(group => [group.status, group._count._all]));
   const total = grouped.reduce((sum, g) => sum + g._count._all, 0);
   const branches = await db.branch.count({ where: isCentral(actor) ? { active: true } : { id: actor.branchId, active: true } });
+  const custody = await currentCustodyByResource(rows.filter(row => row.status === 'ASSIGNED').map(row => row.id));
   res.json({
-    resources: rows.map(row => serialize(row, actor)),
+    resources: rows.map(row => serialize(row, actor, custody.get(row.id) ?? null)),
     summary: {
       total, assigned: counts.ASSIGNED ?? 0, available: counts.AVAILABLE ?? 0,
       maintenance: counts.IN_MAINTENANCE ?? 0, branches
@@ -374,7 +377,8 @@ router.post('/:resourceId/documents', allowEdit, run(async (req, res) => {
       });
       return tx.resource.findUniqueOrThrow({ where: { id: resource.id }, include });
     });
-    res.status(201).json({ resource: serialize(updated, actor) });
+    const custody = await currentCustodyByResource([updated.id]);
+    res.status(201).json({ resource: serialize(updated, actor, custody.get(updated.id) ?? null) });
   } catch (error) { if (!handleError(error, res)) throw error; }
 }));
 
@@ -411,8 +415,24 @@ router.delete('/:resourceId/documents/:documentId', allowEdit, run(async (req, r
       });
       return tx.resource.findUniqueOrThrow({ where: { id: resource.id }, include });
     });
-    res.json({ resource: serialize(updated, actor) });
+    const custody = await currentCustodyByResource([updated.id]);
+    res.json({ resource: serialize(updated, actor, custody.get(updated.id) ?? null) });
   } catch (error) { if (!handleError(error, res)) throw error; }
+}));
+
+router.get('/:resourceId/assignments', run(async (req, res) => {
+  const actor = principal(res);
+  const resource = await db.resource.findUnique({
+    where: { id: req.params.resourceId }, select: { id: true, branchId: true }
+  });
+  if (!resource || !canAccessBranch(actor.roleKey, actor.branchId, resource.branchId)) {
+    fail(res, 404, 'NOT_FOUND', 'Resource not found'); return;
+  }
+  const [custody, history] = await Promise.all([
+    currentCustodyByResource([resource.id]), resourceAssignmentHistory(resource.id)
+  ]);
+  res.setHeader('Cache-Control', 'private, no-store');
+  res.json({ current: custody.get(resource.id) ?? null, ...history });
 }));
 
 router.get('/:resourceId', run(async (req, res) => {
@@ -421,7 +441,8 @@ router.get('/:resourceId', run(async (req, res) => {
   if (!row || !canAccessBranch(actor.roleKey, actor.branchId, row.branchId)) {
     fail(res, 404, 'NOT_FOUND', 'Resource not found'); return;
   }
-  res.json({ resource: serialize(row, actor) });
+  const custody = await currentCustodyByResource([row.id]);
+  res.json({ resource: serialize(row, actor, custody.get(row.id) ?? null) });
 }));
 
 router.post('/', allowCreate, run(async (req, res) => {
@@ -522,6 +543,8 @@ router.delete('/:resourceId', allowEdit, run(async (req, res) => {
       });
       if (!prior) throw Error('NOT_FOUND');
       if (!([ResourceStatus.AVAILABLE, ResourceStatus.RETIRED] as ResourceStatus[]).includes(prior.status)) throw Error('IN_USE');
+      // Never remove an asset with historical custody records, even after return.
+      if (await tx.assignmentItem.count({ where: { resourceId: prior.id } }) > 0) throw Error('IN_USE');
       await tx.resource.delete({ where: { id: prior.id } });
       await event(tx, actor, prior, 'DELETED', auditResource(prior));
       await tx.securityAuditEvent.create({ data: {

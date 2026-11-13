@@ -47,6 +47,7 @@ model Branch {
   users       User[]
   departments Department[]
   resources   Resource[]
+  assignments Assignment[]
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 
@@ -88,6 +89,8 @@ model User {
   sessions       Session[]
   actorEvents    SecurityAuditEvent[] @relation("AuditActor")
   targetEvents   SecurityAuditEvent[] @relation("AuditTarget")
+  assignmentsReceived Assignment[] @relation("AssignmentRecipient")
+  assignmentsIssued Assignment[] @relation("AssignmentIssuer")
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
 }
@@ -175,6 +178,7 @@ model Resource {
   residualValue      Decimal?       @db.Decimal(18, 2)
   customFields       Json           @default("{}")
   documents          ResourceDocument[]
+  assignmentItems    AssignmentItem[]
   createdAt          DateTime       @default(now())
   updatedAt          DateTime       @updatedAt
 
@@ -230,4 +234,96 @@ enum ResourceStatus {
   IN_TRANSFER
   IN_MAINTENANCE
   RETIRED
+}
+
+model AssignmentCounter {
+  name       String @id
+  nextNumber Int
+}
+
+enum AssignmentKind {
+  BRANCH_ISSUE
+  EMPLOYEE_TRANSFER
+}
+
+enum AssignmentItemStatus {
+  PENDING
+  ACCEPTED
+  ISSUE_REPORTED
+  RETURN_REQUESTED
+  RETURNED
+  TRANSFER_PENDING
+  TRANSFERRED
+  CANCELLED
+}
+
+model Assignment {
+  id          String       @id @default(uuid())
+  code        String       @unique
+  kind        AssignmentKind @default(BRANCH_ISSUE)
+  branchId    String
+  branch      Branch       @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  recipientId String
+  recipient   User         @relation("AssignmentRecipient", fields: [recipientId], references: [id], onDelete: Restrict)
+  issuedById  String
+  issuedBy    User         @relation("AssignmentIssuer", fields: [issuedById], references: [id], onDelete: Restrict)
+  notes       String       @default("")
+  dueAt       DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  items       AssignmentItem[]
+  events      AssignmentEvent[]
+
+  @@index([branchId, createdAt])
+  @@index([recipientId, createdAt])
+}
+
+model AssignmentItem {
+  id                 String               @id @default(uuid())
+  assignmentId       String
+  assignment         Assignment           @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+  resourceId         String
+  resource           Resource             @relation(fields: [resourceId], references: [id], onDelete: Restrict)
+  status             AssignmentItemStatus @default(PENDING)
+  conditionOnIssue   String
+  receiptNotes       String               @default("")
+  acceptedAt         DateTime?
+  returnRequestedAt  DateTime?
+  returnedAt         DateTime?
+  returnCondition    String?
+  sourceItemId       String?
+  sourceItem         AssignmentItem?      @relation("AssignmentTransfers", fields: [sourceItemId], references: [id], onDelete: Restrict)
+  destinationItems   AssignmentItem[]     @relation("AssignmentTransfers")
+  evidence           AssignmentEvidence?
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+
+  @@index([assignmentId, status])
+  @@index([resourceId, status])
+  @@index([sourceItemId])
+}
+
+model AssignmentEvidence {
+  id             String         @id @default(uuid())
+  itemId         String         @unique
+  item           AssignmentItem @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  filename       String
+  mimeType       String
+  byteSize       Int
+  content        Bytes
+  createdAt      DateTime       @default(now())
+}
+
+model AssignmentEvent {
+  id           String     @id @default(uuid())
+  assignmentId String
+  assignment   Assignment @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+  itemId       String?
+  action       String
+  actorId      String
+  actorName    String
+  details      Json       @default("{}")
+  createdAt    DateTime   @default(now())
+
+  @@index([assignmentId, createdAt])
 }
