@@ -49,8 +49,9 @@ function StatusPill({ status }: { status: ResourceStatus }) {
   return <span className={'rs-status ' + label.toLowerCase().replace(/\s+/g, '-')}>
     <span/>{label}</span>;
 }
-function ResourceDrawer({ resource, close, canEdit, canDelete, onEdit, onRemoved }: {
-  resource: ResourceRecord; close: () => void; canEdit: boolean; canDelete: boolean;
+function ResourceDrawer({ resource, categories, close, canEdit, canDelete, onEdit, onRemoved }: {
+  resource: ResourceRecord; categories: Category[];
+  close: () => void; canEdit: boolean; canDelete: boolean;
   onEdit: () => void; onRemoved: () => void
 }) {
   const [tab, setTab] = useState<Tab>('Overview');
@@ -62,6 +63,17 @@ function ResourceDrawer({ resource, close, canEdit, canDelete, onEdit, onRemoved
   const toast = useToast();
   const Icon = iconFor(resource.category);
   const editable = resource.status === 'AVAILABLE' || resource.status === 'RETIRED';
+  const definitions = categories.find(category => category.name === resource.category)?.definitions ?? [];
+  const missingRequired = definitions.filter(field => field.required && !resource.customFields?.[field.key]?.trim());
+  const customItems = [
+    ...definitions.filter(field => field.required || resource.customFields?.[field.key]?.trim())
+      .map(field => ({ key: field.key, label: field.label,
+        value: resource.customFields?.[field.key] ?? '' })),
+    ...Object.entries(resource.customFields ?? {})
+      .filter(([key, value]) => !definitions.some(field => field.key === key) && value.trim())
+      .map(([key, value]) => ({ key, label: key, value }))
+  ];
+
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && !busy && !document.querySelector('.ui-select-options')) {
@@ -108,6 +120,12 @@ function ResourceDrawer({ resource, close, canEdit, canDelete, onEdit, onRemoved
       </div>
       <div className="rs-drawer-content">
         {tab === 'Overview' && <>
+          {missingRequired.length > 0 && <div className="rs-required-summary" role="status">
+            <strong>Required specifications pending</strong>
+            <p>{missingRequired.map(field => field.label).join(', ')}.
+              {canEdit ? ' Open Edit resource to complete these fields.' :
+                ' An authorized editor can complete these fields later.'}</p>
+          </div>}
           <div className="rs-detail-section"><h4>General information</h4>
             <dl className="rs-detail-fields">
               {detail('Asset ID', resource.assetCode)}
@@ -122,10 +140,11 @@ function ResourceDrawer({ resource, close, canEdit, canDelete, onEdit, onRemoved
               {detail('Notes', resource.description || '—')}
             </dl>
           </div>
-          {Object.keys(resource.customFields ?? {}).length > 0 && <div className="rs-detail-section">
+          {customItems.length > 0 && <div className="rs-detail-section">
             <h4>Category specifications</h4>
             <dl className="rs-detail-fields">
-              {Object.entries(resource.customFields).map(([key, value]) => detail(key, value || '—'))}
+              {customItems.map(field => detail(field.label, field.value ||
+                <span className="rs-required-missing">Not completed</span>))}
             </dl>
           </div>}
           {resource.purchasePrice !== undefined && <div className="rs-detail-section">
@@ -330,7 +349,7 @@ export default function ResourcesPage() {
         {truncated ? ' · first 500 of ' + summary.total + ' (more require pagination)' : ' · ' + summary.total + ' registered'}
       </span><span>Click a row to view asset details</span></div>
     </Card>
-    {selected && <ResourceDrawer resource={selected} close={() => setSelected(null)}
+    {selected && <ResourceDrawer resource={selected} categories={categories} close={() => setSelected(null)}
       canEdit={canEdit} canDelete={canDelete}
       onEdit={() => { setEditing(selected); setSelected(null); }}
       onRemoved={() => saved(selected.assetCode + ' deleted.')}/>}
