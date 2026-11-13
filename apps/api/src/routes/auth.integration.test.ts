@@ -154,6 +154,53 @@ test('session login, CSRF, RBAC directory read and logout', { skip: !process.env
     assert.equal(doc.status, 200);
     assert.match(await doc.text(), /^%PDF-1.7/);
 
+
+    // An existing asset accepts late attachments without a full edit or changes to its metadata.
+    const lateFile = {
+      filename: 'გარანტია.pdf', mimeType: 'application/pdf',
+      base64: Buffer.from('%PDF-1.7\nextra warranty').toString('base64')
+    };
+    const lateUpload = await resourceApi('/' + createdAsset.id + '/documents', 'POST', {
+      documents: [lateFile]
+    });
+    assert.equal(lateUpload.status, 201);
+    const lateResult = await lateUpload.json() as {
+      resource: { documents: { id: string; filename: string }[] }
+    };
+    assert.equal(lateResult.resource.documents.length, 2);
+    const extraFile = lateResult.resource.documents.find(x => x.filename === lateFile.filename);
+    assert.ok(extraFile);
+    const downloadedExtra = await fetch(base + '/api/v1/resources/' + createdAsset.id +
+      '/documents/' + extraFile.id, { headers: { cookie: both } });
+    assert.equal(downloadedExtra.status, 200);
+    assert.match(await downloadedExtra.text(), /extra warranty/);
+
+    const invalidLate = await resourceApi('/' + createdAsset.id + '/documents', 'POST', {
+      documents: [{ filename: 'fake.png', mimeType: 'image/png',
+        base64: Buffer.from('%PDF-1.7\nnot PNG').toString('base64') }]
+    });
+    assert.equal(invalidLate.status, 400);
+    const badDelete = await resourceApi('/' + createdAsset.id +
+      '/documents/not-a-real-id', 'DELETE', {});
+    assert.equal(badDelete.status, 404);
+    const removedExtra = await resourceApi('/' + createdAsset.id +
+      '/documents/' + extraFile.id, 'DELETE', {});
+    assert.equal(removedExtra.status, 200);
+    const remainingDocs = await removedExtra.json() as {
+      resource: { documents: { id: string }[] }
+    };
+    assert.equal(remainingDocs.resource.documents.length, 1);
+    const missingFile = await fetch(base + '/api/v1/resources/' + createdAsset.id +
+      '/documents/' + extraFile.id, { headers: { cookie: both } });
+    assert.equal(missingFile.status, 404);
+    const auditOfFiles = await db.resourceAuditEvent.findMany({
+      where: { resourceId: createdAsset.id,
+        action: { in: ['DOCUMENT_ADDED', 'DOCUMENT_DELETED'] } }
+    });
+    assert.equal(auditOfFiles.length, 2);
+    assert.equal(auditOfFiles.some(entry => entry.action === 'DOCUMENT_ADDED'), true);
+    assert.equal(auditOfFiles.some(entry => entry.action === 'DOCUMENT_DELETED'), true);
+
     const updatedAsset = await resourceApi('/' + createdAsset.id, 'PATCH', {
       ...resourceTemplate, name: 'Integration Test Laptop Updated', status: 'RETIRED',
       documents: undefined
