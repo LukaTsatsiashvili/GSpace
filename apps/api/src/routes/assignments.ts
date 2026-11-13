@@ -233,6 +233,62 @@ router.get('/', run(async (_req, res) => {
   });
 }));
 
+// Export only the explicitly selected, accessible handovers. One row per item
+// preserves individual confirmation and return outcomes in Excel-compatible CSV.
+// Access matches the resource register's reports.export permission.
+router.post('/export', run(async (req, res) => {
+  const parsed = z.object({ ids: z.array(id).min(1).max(200) }).strict().safeParse(req.body);
+  if (!parsed.success || !unique(parsed.data.ids)) {
+    fail(res, 400, 'INVALID_INPUT', 'Select between 1 and 200 distinct assignments'); return;
+  }
+  const actor = principal(res);
+  if (!actor.permissions.includes('reports.export')) {
+    fail(res, 403, 'FORBIDDEN', 'Report export permission is required'); return;
+  }
+  const personal: Prisma.AssignmentWhereInput = { OR: [
+    { recipientId: actor.userId },
+    { kind: 'EMPLOYEE_TRANSFER', items: { some: {
+      sourceItem: { assignment: { recipientId: actor.userId } }
+    } } }
+  ] };
+  const permitted: Prisma.AssignmentWhereInput = actor.permissions.includes('assignments.manage') ?
+    isCentral(actor) ? {} : { OR: [{ branchId: actor.branchId }, personal] } : personal;
+  const selected = await db.assignment.findMany({
+    where: { AND: [permitted, { id: { in: parsed.data.ids } }] },
+    include,
+    orderBy: { createdAt: 'desc' }
+  });
+  if (selected.length !== parsed.data.ids.length) {
+    fail(res, 403, 'FORBIDDEN', 'Some selected assignments are outside your access scope'); return;
+  }
+  const encodeCsv = (input: unknown) => {
+    const raw = String(input ?? '').replace(/[\r\n]+/g, ' ');
+    const safe = /^\s*[=+\-@]/.test(raw) ? "'" + raw : raw;
+    return '"' + safe.replace(/"/g, '""') + '"';
+  };
+  const headers = ['Assignment ID', 'Handover type', 'Branch', 'Recipient',
+    'Issued by', 'Issued at', 'Return due', 'Assignment status', 'Resource ID',
+    'Resource name', 'Item status', 'Condition on issue', 'Condition on return',
+    'Accepted at', 'Returned at', 'Handover notes', 'Receipt notes'];
+  const rows = selected.flatMap(assignment => assignment.items.map(item => [
+    assignment.code, assignment.kind, assignment.branch.name,
+    assignment.recipient.fullName, assignment.issuedBy.fullName,
+    assignment.createdAt.toISOString(), assignment.dueAt?.toISOString() ?? '',
+    state(assignment.items), item.resource.assetCode, item.resource.name,
+    item.status, item.conditionOnIssue, item.returnCondition ?? '',
+    item.acceptedAt?.toISOString() ?? '', item.returnedAt?.toISOString() ?? '',
+    assignment.notes, item.receiptNotes
+  ]));
+  await db.securityAuditEvent.create({ data: {
+    action: 'ASSIGNMENTS_EXPORTED', success: true, actorUserId: actor.userId,
+    details: JSON.stringify({ assignmentCount: selected.length, itemCount: rows.length })
+  } });
+  res.setHeader('Cache-Control', 'private, no-store');
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="gspace-assignments.csv"');
+  res.send('\uFEFF' + [headers, ...rows].map(row => row.map(encodeCsv).join(',')).join('\r\n'));
+}));
+
 router.get('/:assignmentId', run(async (req, res) => {
   const actor = principal(res);
   const row = await db.assignment.findUnique({ where: { id: req.params.assignmentId }, include });
