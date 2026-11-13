@@ -837,7 +837,7 @@ test('session login, CSRF, RBAC directory read and logout', { skip: !process.env
     assert.equal((await approvalWrite('/' + approval.id + '/decision', both,
       { decision: 'APPROVED', comment: '' })).status, 403);
     assert.equal((await fetch(base + '/api/v1/approvals/' + approval.id,
-      { headers: { cookie: employeeCookies } })).status, 404);
+      { headers: { cookie: csrfCookie + '; ' + freshEmployeeCookie } })).status, 404);
     assert.equal((await approvalWrite('/' + approval.id + '/decision', managerCookies,
       { decision: 'APPROVED', comment: 'First approval' })).status, 200);
     const afterFirst = await db.approvalRequest.findUniqueOrThrow({ where: { id: approval.id } });
