@@ -12,7 +12,7 @@ This stage converts the approved Assignments page from illustrative entries to P
 - The recipient or authorized manager requests return of accepted/issue-reported items. Only an authorized manager verifies return, records condition, and makes the resource `AVAILABLE` again.
 - Direct employee transfer of accepted items is supported within the same branch. The original item stays `TRANSFER_PENDING` until the receiving employee confirms. Rejected/unconfirmed transfers can be cancelled, restoring original custody; completed transfers leave immutable history.
 - Each change writes `AssignmentEvent` and `SecurityAuditEvent`. Resource lifecycle status changes also create `ResourceAuditEvent` records. Resource deletion is rejected when historical assignment items exist.
-- Receipt photo evidence may be attached (JPEG/PNG/WebP, up to 2 MiB, stored privately in PostgreSQL). For items whose issue condition is `Damaged`, a photo is mandatory when responding.
+- Receipt photo evidence may be attached (JPEG/PNG/WebP, up to 2 MiB, stored privately in PostgreSQL). For items whose issue condition is `Damaged`, or which are newly marked damaged by the recipient, a photo is mandatory when responding.
 - Assignment listing, summary, current eligible resources, recipients and history now come from real API data. Empty states never substitute fictional records.
 - Existing shared inputs, selectors, checkboxes, light/dark palette and global toast feedback remain in use.
 
@@ -25,6 +25,7 @@ All paths begin with `/api/v1/assignments` and require authenticated sessions. W
 | GET | `/lookups` | Authenticated; write choices only for `assignments.manage` |
 | GET | `/` | Current recipient's handovers, plus scoped manager records |
 | GET | `/:assignmentId` | Recipient or scoped manager |
+| GET | `/:assignmentId/items/:itemId/evidence` | Recipient or scoped manager; download private receipt photo |
 | POST | `/` | Scoped `assignments.manage` |
 | POST | `/:assignmentId/receipt` | Recipient only |
 | POST | `/:assignmentId/returns/request` | Recipient or scoped manager |
@@ -61,5 +62,5 @@ GitHub Actions tests Prisma migrations with disposable PostgreSQL 17, backend ty
 - No in-app/email/browser notifications, due-date reminders, auto-escalation, or return/issue photo on the handover PDF yet. No automatic approval occurs.
 - First 200 accessible assignments are shown; the UI identifies truncation. Full server-side pagination and exact all-record KPIs are future work.
 - No cross-branch transfers in this module; those belong to the dedicated Transfers workflow.
-- No dedicated assignment-specific evidence download/review endpoint yet; only metadata and audited custody decisions are displayed.
+- Receipt photos are downloadable by the involved recipient or authorized manager, but there is no inline image viewer or separate review dashboard yet.
 - No independent production security assessment, backup/restore drill, or end-user acceptance test has been completed.
