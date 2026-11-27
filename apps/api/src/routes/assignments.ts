@@ -23,7 +23,7 @@ const evidenceInput = z.object({
   mimeType: z.enum(['image/jpeg', 'image/png', 'image/webp']),
   base64: z.string().min(1).max(2_900_000)
 }).strict();
-const receiptInput = z.object({ decisions: z.array(z.object({
+const receiptInput = z.object({ onBehalfOf: z.boolean().default(false), decisions: z.array(z.object({
   itemId: id, decision: z.enum(['ACCEPT', 'REPORT_ISSUE']),
   notes: z.string().trim().max(1000).default(''), damageReported: z.boolean().default(false), evidence: evidenceInput.optional()
 }).strict()).min(1).max(25) }).strict();
@@ -51,7 +51,8 @@ const writableError: Record<string, [number, string]> = {
   INVALID_DATE: [400, 'Return due date is not valid'],
   INACTIVE_BRANCH: [400, 'The resource branch is inactive'],
   ALREADY_ISSUED: [409, 'This resource already has an open handover'],
-  SAME_RECIPIENT: [400, 'Select a different recipient for transfer']
+  SAME_RECIPIENT: [400, 'Select a different recipient for transfer'],
+  MANAGER_NOTE_REQUIRED: [400, 'Describe the physical handover (at least 10 characters) when confirming for an employee']
 };
 function handleError(error: unknown, res: Response) {
   if (error instanceof Error && writableError[error.message]) {
@@ -376,7 +377,12 @@ router.post('/:assignmentId/receipt', run(async (req, res) => {
     const files = parsed.data.decisions.map(d => evidenceFile(d.evidence));
     await serializable(async tx => {
       const assignment = await load(tx, req.params.assignmentId);
-      if (assignment.recipientId !== actor.userId) throw Error('FORBIDDEN');
+      const onBehalfOf = assignment.recipientId !== actor.userId;
+      if (onBehalfOf && (!parsed.data.onBehalfOf || !manages(actor, assignment.branchId)))
+        throw Error('FORBIDDEN');
+      if (!onBehalfOf && parsed.data.onBehalfOf) throw Error('FORBIDDEN');
+      if (onBehalfOf && parsed.data.decisions.some(d => d.notes.trim().length < 10))
+        throw Error('MANAGER_NOTE_REQUIRED');
       for (const [i, d] of parsed.data.decisions.entries()) {
         const item = assignment.items.find(item => item.id === d.itemId);
         if (!item || item.status !== 'PENDING') throw Error('INVALID_ITEM');
@@ -394,7 +400,12 @@ router.post('/:assignmentId/receipt', run(async (req, res) => {
           });
           if (changed.count !== 1) throw Error('INVALID_ITEM');
         }
-        await event(tx, assignment.id, actor, next, item.id, { resourceId: item.resourceId, damageReported: d.damageReported });
+        await event(tx, assignment.id, actor, next, item.id, {
+          resourceId: item.resourceId, damageReported: d.damageReported,
+          confirmationMode: onBehalfOf ? 'MANAGER_RECORDED_PHYSICAL_HANDOVER' : 'RECIPIENT_ACKNOWLEDGED',
+          recordedByUserId: actor.userId, recipientId: assignment.recipientId,
+          note: d.notes
+        });
       }
     });
     res.json({ ok: true });
