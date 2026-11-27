@@ -18,7 +18,7 @@
 .ap-catalog .section-tab-count{border-radius:5px;font-size:10px;padding:2px 6px;background:var(--status-neutral-bg);color:var(--status-neutral-fg)}
 .ap-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:17px 20px}
 .ap-toolbar .ap-search.ui-search{width:min(315px,100%);height:40px}
-.ap-filter-select{width:166px;max-width:100%}
+.ap-filter-select{max-width:100%}
 .ap-toolbar-fill{flex:1}
 .ap-toolbar>.ui-button{white-space:nowrap}
 .ap-table-scroll{width:100%;overflow-x:auto}
@@ -188,7 +188,7 @@
 .ap-field-tags>span{display:inline-flex;padding:7px 9px;background:var(--accent-soft);color:var(--accent);border-radius:7px;font-size:10px;font-weight:750}
 .ap-route-preview{font-size:11px;line-height:1.7;background:var(--accent-soft);padding:15px;border-radius:9px}
 @media(max-width:1200px){.ap-summary{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:850px){.ap-toolbar{padding:14px}.ap-filter-select{width:145px}.ap-types-content{padding:16px}}
+@media(max-width:850px){.ap-toolbar{padding:14px}.ap-types-content{padding:16px}}
 @media(max-width:730px){.ap-page .page-header{flex-direction:column;align-items:stretch}.ap-page .page-header-actions{justify-content:flex-start}
   .ap-summary{gap:11px}.ap-types-heading{align-items:flex-start}.ap-types-heading>.ui-button{white-space:nowrap}.ap-table-footer{padding:15px}
   .ap-toolbar .ap-search.ui-search{width:100%}.ap-toolbar-fill{display:none}
@@ -197,7 +197,7 @@
 }
 @media(max-width:480px){.ap-summary{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.ap-stat{padding:14px}
   .ap-stat>div>span{font-size:10px}.ap-stat-icon{width:30px;height:30px}.ap-stat>strong{font-size:25px}
-  .ap-filter-select{flex:1;width:44%;min-width:120px}.ap-toolbar>.ui-button{margin-left:auto}
+  .ap-toolbar>.ui-button{margin-left:auto}
   .ap-types-heading{flex-direction:column}.ap-type-copy>span{font-size:10px}.ap-type-copy>small{font-size:9px}
   .ap-type-row>.ap-type-status{font-size:9px;padding:5px}.ap-type-row>.ap-type-arrow{display:none}
   .ap-modal-center{padding:0}.ap-modal{max-height:100dvh;height:100dvh;width:100%;border-radius:0}
