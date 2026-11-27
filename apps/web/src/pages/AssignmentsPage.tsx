@@ -1,3 +1,4 @@
+import { OrganizationFilters,useOrganizationFilter } from '../components/OrganizationFilters';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ArrowDownToLine, ArrowLeftRight, Box, Check, CheckCheck, Clock3, Plus, UsersRound, X } from 'lucide-react';
 import { Badge, Button, Card, Checkbox, Input, PageHeader, SearchInput, SectionTabs, Select, Textarea } from '../components/ui';
@@ -328,6 +329,7 @@ export default function AssignmentsPage() {
   const [tab, setTab] = useState<Tab>('All assignments');
   const [search, setSearch] = useState('');
   const [branch, setBranch] = useState('All branches');
+  const organizationFilter=useOrganizationFilter();
   const [selected, setSelected] = useState<Assignment | null>(null);
   const [creating, setCreating] = useState(false);
   const refresh = useCallback(async () => {
@@ -353,8 +355,8 @@ export default function AssignmentsPage() {
     const term = search.trim().toLowerCase();
     const matchSearch = !term || [a.code, a.employee, a.branch, ...a.assets.flatMap(x => [x.name, x.id])]
       .some(x => x.toLowerCase().includes(term));
-    return matchTab && matchSearch && (branch === 'All branches' || a.branch === branch);
-  }), [assignments, tab, search, branch]);
+    return matchTab && matchSearch && (branch === 'All branches' || a.branch === branch) && organizationFilter.matches(a.branchId);
+  }), [assignments, tab, search, branch,organizationFilter]);
   const canExport = user.role.permissions.includes('reports.export');
   async function exportCsv() {
     if (!canExport || exporting || !visible.length) return;
@@ -381,8 +383,8 @@ export default function AssignmentsPage() {
       <SectionTabs tabs={tabs} selected={tab} onChange={t => setTab(t as Tab)}/>
       <div className="as-toolbar"><SearchInput className="as-search" placeholder="Search employee, asset or ID..."
         value={search} onChange={e => setSearch(e.target.value)}/>
-        <Select className="as-branch-select" label="Filter branch" options={branches} value={branch} onChange={setBranch}/>
-        <div className="as-toolbar-spacer"/><Button onClick={() => { setSearch(''); setBranch('All branches'); }}>Clear filters</Button>
+        <OrganizationFilters filter={organizationFilter}/>{!organizationFilter.branches.length&&<Select className="as-branch-select" label="Filter branch" options={branches} value={branch} onChange={setBranch}/>}
+        <div className="as-toolbar-spacer"/><Button onClick={() => { setSearch(''); setBranch('All branches');organizationFilter.reset(); }}>Clear filters</Button>
         <Button onClick={() => void refresh()}>Refresh</Button></div>
       {loading && <p className="as-form-help" style={{ padding: 20 }}>Loading real assignments...</p>}
       {error && <p className="as-form-error" style={{ padding: 20 }} role="alert">{error} <Button onClick={() => void refresh()}>Retry</Button></p>}

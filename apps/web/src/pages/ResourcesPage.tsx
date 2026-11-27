@@ -1,3 +1,4 @@
+import { OrganizationFilters,useOrganizationFilter } from '../components/OrganizationFilters';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   ArrowDownToLine, ArrowLeftRight, Boxes, Check, ClipboardList, Grid2X2, Wrench, Users, Box,
@@ -249,6 +250,7 @@ export default function ResourcesPage() {
   const [status, setStatus] = useState<string>('All statuses');
   const [category, setCategory] = useState('All categories');
   const [branch, setBranch] = useState('All branches');
+  const organizationFilter=useOrganizationFilter();
   const [view, setView] = useState<View>('list');
   const [selected, setSelected] = useState<ResourceRecord | null>(null);
   const [editing, setEditing] = useState<ResourceRecord | null>(null);
@@ -273,9 +275,9 @@ export default function ResourcesPage() {
         resource.branch].some(value => value.toLowerCase().includes(term))) &&
       (status === 'All statuses' || resource.status === statusFilters[status]) &&
       (category === 'All categories' || resource.category === category) &&
-      (branch === 'All branches' || resource.branch === branch);
-  }), [resources, activeTab, search, status, category, branch]);
-  const clearFilters = () => { setSearch(''); setStatus('All statuses'); setCategory('All categories'); setBranch('All branches'); };
+      (branch === 'All branches' || resource.branch === branch) && organizationFilter.matches(resource.branchId);
+  }), [resources, activeTab, search, status, category, branch,organizationFilter]);
+  const clearFilters = () => { setSearch(''); setStatus('All statuses'); setCategory('All categories'); setBranch('All branches'); organizationFilter.reset(); };
   function saved(message: string) {
     setAdding(false); setEditing(null); setBulkOpen(false); setCategoryOpen(false); setSelected(null);
     toast.success(message); void load();
@@ -319,7 +321,7 @@ export default function ResourcesPage() {
           placeholder="Search by name, ID or serial..." value={search}
           onChange={event => setSearch(event.target.value)}/>
         <SelectMenu label="Filter status" value={status} options={statuses} onChange={setStatus}/>
-        <SelectMenu label="Filter branch" value={branch} options={['All branches', ...branches.map(b => b.name)]} onChange={setBranch}/>
+        <OrganizationFilters filter={organizationFilter}/>{!organizationFilter.branches.length&&<SelectMenu label="Filter branch" value={branch} options={['All branches', ...branches.map(b => b.name)]} onChange={setBranch}/>}
         <SelectMenu label="Filter type" value={category === 'All categories' ? 'All types' : category}
           options={['All types', ...categories.map(c => c.name)]}
           onChange={value => setCategory(value === 'All types' ? 'All categories' : value)}/>

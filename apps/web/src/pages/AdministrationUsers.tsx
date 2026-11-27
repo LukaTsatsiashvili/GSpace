@@ -1,3 +1,4 @@
+import { OrganizationFilters,useOrganizationFilter } from '../components/OrganizationFilters';
 import { useCallback, useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { ArrowLeftRight, Check, Copy, Plus, X } from 'lucide-react';
 import { Button, Input, SearchInput, Select, Textarea } from '../components/ui';
@@ -264,6 +265,7 @@ export default function AdministrationUsers({ openCreate, closeCreate, onSummary
   const [search, setSearch] = useState('');
   const [role, setRole] = useState('All roles');
   const [branch, setBranch] = useState('All branches');
+  const organizationFilter=useOrganizationFilter();
   const [status, setStatus] = useState('All statuses');
   const [selected, setSelected] = useState<Account | null>(null);
   const [editing, setEditing] = useState<Account | null>(null);
@@ -293,9 +295,9 @@ export default function AdministrationUsers({ openCreate, closeCreate, onSummary
     const state = !u.active ? 'Inactive' : u.pendingActivation ? 'Pending' : 'Active';
     return (!query || [u.name, u.email, u.role.name, u.branch.name, u.department?.name || ''].some(x => x.toLowerCase().includes(query)))
       && (role === 'All roles' || u.role.name === role)
-      && (branch === 'All branches' || u.branch.name === branch)
+      && (branch === 'All branches' || u.branch.name === branch) && organizationFilter.matches(u.branch.id)
       && (status === 'All statuses' || state === status);
-  }), [users, search, role, branch, status]);
+  }), [users, search, role, branch, status,organizationFilter]);
   function saved(activationPath: string | null) {
     setEditing(null); setCreateInternal(false); closeCreate(); setSelected(null); setResetting(null);
     if (activationPath) setInvite(activationPath);
@@ -314,7 +316,7 @@ export default function AdministrationUsers({ openCreate, closeCreate, onSummary
         value={search} onChange={e => setSearch(e.target.value)}/>
       <Select className="am-filter" label="Filter role" options={['All roles', ...lookups.roles.map(r => r.name)]} value={role} onChange={setRole}/>
       <Select className="am-filter" label="Filter user status" options={['All statuses','Active','Inactive','Pending']} value={status} onChange={setStatus}/>
-      <Select className="am-filter" label="Filter branch" options={['All branches', ...lookups.branches.map(b => b.name)]} value={branch} onChange={setBranch}/>
+      <OrganizationFilters filter={organizationFilter}/>{!organizationFilter.branches.length&&<Select className="am-filter" label="Filter branch" options={['All branches', ...lookups.branches.map(b => b.name)]} value={branch} onChange={setBranch}/>}
       <span className="am-spacer"/>
       <Button variant="primary" icon={<Plus size={16}/>} onClick={openNew}>Add user</Button>
     </div>
