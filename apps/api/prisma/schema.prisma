@@ -41,6 +41,11 @@ model Branch {
   name        String
   code        String       @unique
   city        String       @default("")
+  kind        String       @default("LEGACY")
+  businessUnitId String?
+  businessUnit BusinessUnit? @relation(fields: [businessUnitId], references: [id], onDelete: Restrict)
+  brandId String?
+  brand Brand? @relation(fields: [brandId], references: [id], onDelete: Restrict)
   managerId   String?
   manager     User?        @relation("BranchManager", fields: [managerId], references: [id], onDelete: SetNull)
   active      Boolean      @default(true)
@@ -53,6 +58,7 @@ model Branch {
   updatedAt   DateTime     @updatedAt
 
   @@index([managerId])
+  @@index([businessUnitId, brandId])
 }
 
 model Department {
@@ -442,4 +448,17 @@ model ApprovalEvent {
   createdAt  DateTime        @default(now())
 
   @@index([requestId, createdAt])
+}
+
+model BusinessUnit {
+  id String @id @default(uuid())
+  name String @unique
+  active Boolean @default(true)
+  branches Branch[]
+}
+model Brand {
+  id String @id @default(uuid())
+  name String @unique
+  active Boolean @default(true)
+  branches Branch[]
 }

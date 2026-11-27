@@ -1,3 +1,4 @@
+import { canLoginAtBranch } from '../security/organization-policy.js';
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { Prisma, type Role } from '@prisma/client';
 import { z } from 'zod';
@@ -53,9 +54,9 @@ async function assignableRole(roleId: string, actor: AuthPrincipal): Promise<Rol
   if (target.protected) return null;
   return target.grants.every(item => actor.permissions.includes(item.permission.key)) ? target : null;
 }
-async function validOrganization(branchId: string, departmentId: string | null) {
+async function validOrganization(branchId: string, departmentId: string | null, roleKey:string) {
   const branch = await db.branch.findUnique({ where: { id: branchId } });
-  if (!branch?.active) return false;
+  if (!branch?.active || (roleKey!=='EMPLOYEE' && !canLoginAtBranch(roleKey,branch.kind))) return false;
   if (!departmentId) return true;
   const department = await db.department.findUnique({ where: { id: departmentId } });
   return !!department?.active && department.branchId === branchId;
@@ -98,7 +99,7 @@ router.get('/lookups', asyncRoute(async (_req, res) => {
   ]);
   res.json({
     roles: roles.filter(role => actor.roleKey === 'SYSTEM_ADMIN' || (!role.protected && role.grants.every(g => actor.permissions.includes(g.permission.key)))).map(r => ({ id: r.id, key: r.key, name: r.name, protected: r.protected })),
-    branches: branches.map(b => ({ id: b.id, name: b.name })),
+    branches: branches.map(b => ({ id: b.id, name: b.name, kind:b.kind })),
     departments: departments.map(d => ({ id: d.id, name: d.name, branchId: d.branchId }))
   });
 }));
@@ -123,7 +124,7 @@ router.post('/users', asyncRoute(async (req, res) => {
     failure(res, 403, 'FORBIDDEN', 'Cannot create users in another branch'); return;
   }
   const targetRole = await assignableRole(input.roleId, actor);
-  if (!targetRole || !await validOrganization(input.branchId, input.departmentId)) {
+  if (!targetRole || !await validOrganization(input.branchId, input.departmentId,targetRole.key)) {
     failure(res, 403, 'INVALID_MEMBERSHIP', 'Role, branch or department is unavailable'); return;
   }
   // Employee is a directory-only resource custodian; never issue login invitations.
@@ -168,7 +169,8 @@ router.patch('/users/:userId', asyncRoute(async (req, res) => {
   if (!globalScope(actor) && branchId !== actor.branchId) {
     failure(res, 403, 'FORBIDDEN', 'Cannot move users to another branch'); return;
   }
-  if (!await assignableRole(roleId, actor) || !await validOrganization(branchId, departmentId)) {
+  const nextRole=await assignableRole(roleId,actor);
+  if (!nextRole || !await validOrganization(branchId, departmentId,nextRole.key)) {
     failure(res, 403, 'INVALID_MEMBERSHIP', 'Role, branch or department is unavailable'); return;
   }
   // A user cannot disable, demote, or move their own security identity.
@@ -197,7 +199,7 @@ router.patch('/users/:userId', asyncRoute(async (req, res) => {
         }
       });
       // A deactivated or transferred employee must not retain organizational leadership.
-      if (branchId !== current.branchId || (current.active && input.active === false)) {
+      if (branchId !== current.branchId || (current.active && input.active === false) || (current.role.key==='BRANCH_MANAGER' && nextRole.key!=='BRANCH_MANAGER')) {
         const [managedBranches, ledDepartments] = await Promise.all([
           tx.branch.updateMany({ where: { managerId: current.id }, data: { managerId: null } }),
           tx.department.updateMany({ where: { leadUserId: current.id }, data: { leadUserId: null } })
