@@ -27,3 +27,6 @@ test('emails are normalized; branch scope defaults to restricted', () => {
   assert.equal(canAccessBranch('BRANCH_MANAGER', 'BR-1', 'BR-1'), true);
   assert.equal(canAccessBranch('SYSTEM_ADMIN', 'BR-1', 'BR-2'), true);
 });
+
+test('retail store login is restricted to branch managers, employees remain directory-only', async()=>{const {canLoginAtBranch}=await import('./organization-policy.js');assert.equal(canLoginAtBranch('BRANCH_MANAGER','STORE'),true);for(const role of ['EMPLOYEE','ASSET_MANAGER','AUDITOR','SYSTEM_ADMIN','COMPANY_ADMIN','CUSTOM_ROLE'])assert.equal(canLoginAtBranch(role,'STORE'),false);assert.equal(canLoginAtBranch('SYSTEM_ADMIN','OFFICE'),true);assert.equal(canLoginAtBranch('EMPLOYEE','OFFICE'),false);assert.equal(canLoginAtBranch('SYSTEM_ADMIN','LEGACY'),true);});
+test('store membership permits exactly manager and employee, regardless of login eligibility',async()=>{const {canBelongToBranch}=await import('./organization-policy.js');for(const key of ['BRANCH_MANAGER','EMPLOYEE'])assert.equal(canBelongToBranch(key,'STORE'),true);for(const key of ['SYSTEM_ADMIN','COMPANY_ADMIN','ASSET_MANAGER','AUDITOR','CUSTOM_ROLE'])assert.equal(canBelongToBranch(key,'STORE'),false);assert.equal(canBelongToBranch('ASSET_MANAGER','OFFICE'),true);});

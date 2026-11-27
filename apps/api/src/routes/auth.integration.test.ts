@@ -100,6 +100,21 @@ test('session login, CSRF, RBAC directory read and logout', { skip: !process.env
     assert.equal(protectedEdit.status, 403);
 
 
+    // Store membership: both active and inactive accounts may have only the two retail roles.
+    const orgPost=(path:string,body:object)=>fetch(base+'/api/v1/admin/organization'+path,{method:'POST',headers:{cookie:both,'content-type':'application/json','x-csrf-token':csrf.csrfToken},body:JSON.stringify(body)});
+    const retailUnit=await orgPost('/groups/businessUnits',{name:'Integration Retail',active:true});
+    assert.equal(retailUnit.status,201);const retailUnitId=(await retailUnit.json() as {id:string}).id;
+    const retailBrand=await orgPost('/groups/brands',{name:'Integration Brand',active:true});
+    assert.equal(retailBrand.status,201);const retailBrandId=(await retailBrand.json() as {id:string}).id;
+    const retailStore=await orgPost('/branches',{name:'Integration Store',code:'INTEGRATION_STORE',city:'Tbilisi',managerId:null,active:true,kind:'STORE',businessUnitId:retailUnitId,brandId:retailBrandId});
+    assert.equal(retailStore.status,201);const retailStoreId=(await retailStore.json() as {id:string}).id;
+    const forbiddenStoreUser=await fetch(base+'/api/v1/admin/users',{method:'POST',headers:{cookie:both,'content-type':'application/json','x-csrf-token':csrf.csrfToken},body:JSON.stringify({name:'Invalid Store Account',email:'invalid-store@example.test',roleId:createdRole.id,branchId:retailStoreId,departmentId:null,active:false})});
+    assert.equal(forbiddenStoreUser.status,403);
+    const storeEmployeeRole=await db.role.findUniqueOrThrow({where:{key:'EMPLOYEE'}});
+    const storeEmployee=await fetch(base+'/api/v1/admin/users',{method:'POST',headers:{cookie:both,'content-type':'application/json','x-csrf-token':csrf.csrfToken},body:JSON.stringify({name:'Store Employee Test',email:'store-employee-test@example.test',roleId:storeEmployeeRole.id,branchId:retailStoreId,departmentId:null,active:true})});
+    assert.equal(storeEmployee.status,201);assert.equal((await storeEmployee.json() as {activationPath:string|null}).activationPath,null);
+    const orgDirectory=await fetch(base+'/api/v1/organization',{headers:{cookie:both}});
+    assert.equal(orgDirectory.status,200);assert.ok((await orgDirectory.json() as {branches:{id:string}[]}).branches.some(b=>b.id===retailStoreId));
     // Branch and department CRUD: actual database writes and cross-branch safeguards.
 
     // Resources: authenticated real CRUD, unique Asset IDs, documents, custom fields and bulk registration.

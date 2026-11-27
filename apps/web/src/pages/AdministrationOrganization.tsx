@@ -5,16 +5,19 @@ import { useAuth } from '../auth/AuthGate';
 import { useToast } from '../components/toast';
 
 type Person = { id: string; name: string };
-type Employee = Person & { email: string; branchId: string };
+type Employee = Person & { email: string; branchId: string; roleKey:string };
+type Group={id:string;name:string;active:boolean};
+const kinds=['LEGACY','OFFICE','STORE','WAREHOUSE','OTHER'];
 type Branch = {
   id: string; code: string; name: string; city: string; active: boolean;
+  kind:string;businessUnitId:string|null;brandId:string|null;businessUnit:string|null;brand:string|null;
   manager: Person | null; employees: number; assets: number; departments: number
 };
 type Department = {
   id: string; name: string; branchId: string; branch: string; active: boolean;
   lead: Person | null; members: number
 };
-type Organization = { branches: Branch[]; departments: Department[]; users: Employee[] };
+type Organization = { branches: Branch[]; departments: Department[]; users: Employee[];businessUnits:Group[];brands:Group[] };
 type Kind = 'branches' | 'departments';
 
 async function api<T>(path: string, options?: { method: 'POST' | 'PATCH'; body: object }): Promise<T> {
@@ -80,6 +83,9 @@ function Editor({ kind, organization, selected, canManage, close, saved }: {
   const readOnly = !canManage;
   const [name, setName] = useState(selected?.name ?? '');
   const [code, setCode] = useState(branch?.code ?? '');
+  const [branchKind,setBranchKind]=useState(branch?.kind??'OFFICE');
+  const [unitId,setUnitId]=useState(branch?.businessUnitId??'');
+  const [brandId,setBrandId]=useState(branch?.brandId??'');
   const [city, setCity] = useState(branch?.city ?? '');
   const [branchId, setBranchId] = useState(department?.branchId ?? organization.branches.find(b => b.active)?.id ?? '');
   const [leaderId, setLeaderId] = useState(branch?.manager?.id ?? department?.lead?.id ?? '');
@@ -90,7 +96,7 @@ function Editor({ kind, organization, selected, canManage, close, saved }: {
   const branchOptions = organization.branches.filter(b => b.active || b.id === department?.branchId);
   const chosenBranch = organization.branches.find(b => b.id === branchId);
   const employees = organization.users.filter(u =>
-    u.branchId === (kind === 'branches' ? branch?.id : branchId));
+    u.branchId === (kind === 'branches' ? branch?.id : branchId) && (kind!=='branches'||branchKind!=='STORE'||u.roleKey==='BRANCH_MANAGER'));
   const leaderOption = (person: Employee) => person.name + ' (' + person.email + ')';
   const choices = ['Unassigned', ...employees.map(leaderOption)];
   const chosenLeader = employees.find(u => u.id === leaderId);
@@ -108,6 +114,7 @@ function Editor({ kind, organization, selected, canManage, close, saved }: {
     if (kind === 'departments' && (!chosenBranch || active && !chosenBranch.active)) {
       setError('Please select an active branch.'); return;
     }
+    if(kind==='branches'&&branchKind!=='LEGACY'&&(!unitId||branchKind==='STORE'&&!brandId)){setError('Choose a business unit and a brand for stores.');return;}
     setError(''); setReview(true);
   }
   async function save() {
@@ -115,7 +122,7 @@ function Editor({ kind, organization, selected, canManage, close, saved }: {
     setPending(true); setError('');
     try {
       if (kind === 'branches') {
-        const data = { name: name.trim(), city: city.trim(),
+        const data = { name: name.trim(), city: city.trim(),kind:branchKind,businessUnitId:unitId||null,brandId:brandId||null,
           managerId: branch ? leaderId || null : null, active };
         if (branch) await api('/branches/' + branch.id, { method: 'PATCH', body: data });
         else await api('/branches', { method: 'POST', body: { ...data, code } });
@@ -132,7 +139,7 @@ function Editor({ kind, organization, selected, canManage, close, saved }: {
   const label = kind === 'branches' ? 'Branch' : 'Department';
   const display = kind === 'branches' ? [
     ['Branch name', name], ['Branch code', branch?.code ?? code],
-    ['City / location', city || 'Not specified'],
+    ['City / location', city || 'Not specified'], ['Location type',branchKind],['Business unit',organization.businessUnits.find(g=>g.id===unitId)?.name??'—'],['Brand',organization.brands.find(g=>g.id===brandId)?.name??'—'],
     ['Branch manager', chosenLeader?.name ?? 'Unassigned'],
     ['Status', active ? 'Active' : 'Inactive']
   ] as [string, string][] : [
@@ -166,6 +173,9 @@ function Editor({ kind, organization, selected, canManage, close, saved }: {
           onChange={event => { setCode(event.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, '')); setError(''); }}/></Field>
         <Field label="City / location"><Input value={city} readOnly={readOnly} maxLength={120}
           onChange={event => setCity(event.target.value)} placeholder="e.g. Tbilisi"/></Field>
+        <Field label="Location type"><Select label="Location type" value={branchKind} options={branch?.kind==='LEGACY'?kinds:kinds.filter(k=>k!=='LEGACY')} onChange={v=>{setBranchKind(v);setLeaderId('');}}/></Field>
+        <Field label="Business unit"><Select label="Business unit" value={organization.businessUnits.find(g=>g.id===unitId)?.name??'Unassigned'} options={['Unassigned',...organization.businessUnits.filter(g=>g.active||g.id===unitId).map(g=>g.name)]} onChange={v=>setUnitId(organization.businessUnits.find(g=>g.name===v)?.id??'')}/></Field>
+        <Field label="Brand"><Select label="Brand" value={organization.brands.find(g=>g.id===brandId)?.name??'Unassigned'} options={['Unassigned',...organization.brands.filter(g=>g.active||g.id===brandId).map(g=>g.name)]} onChange={v=>setBrandId(organization.brands.find(g=>g.name===v)?.id??'')}/></Field>
         <Field label="Branch manager">{branch ? <Select label="Branch manager" value={chosenLeader ? leaderOption(chosenLeader) : 'Unassigned'}
           options={choices} onChange={value => setLeaderId(employees.find(u => leaderOption(u) === value)?.id ?? '')}/> :
           <Input readOnly value="Assign after creating the branch"/>}</Field>
@@ -201,6 +211,8 @@ export default function AdministrationOrganization({ kind, onChanged }: {
   const toast = useToast();
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('All statuses');
+  const [unit,setUnit]=useState('All business units');const [brand,setBrand]=useState('All brands');const [branchFilter,setBranchFilter]=useState('All branches');
+  const [groupEdit,setGroupEdit]=useState<{kind:'businessUnits'|'brands';group:Group|null}|null>(null);
   const [editor, setEditor] = useState<Branch | Department | null | undefined>(undefined);
   const load = useCallback(async () => {
     setLoading(true); setError('');
@@ -211,14 +223,15 @@ export default function AdministrationOrganization({ kind, onChanged }: {
   useEffect(() => { void load(); }, [load]);
   const branches = useMemo(() => (organization?.branches ?? []).filter(b => {
     const q = search.trim().toLowerCase();
-    return (!q || [b.name, b.code, b.city, b.manager?.name ?? ''].some(value => value.toLowerCase().includes(q))) &&
+    return (unit==='All business units'||b.businessUnit===unit)&&(brand==='All brands'||b.brand===brand)&&(!q || [b.name, b.code, b.city,b.businessUnit??'',b.brand??'', b.manager?.name ?? ''].some(value => value.toLowerCase().includes(q))) &&
       (status === 'All statuses' || b.active === (status === 'Active'));
-  }), [organization, search, status]);
+  }), [organization, search, status,unit,brand]);
   const departments = useMemo(() => (organization?.departments ?? []).filter(d => {
     const q = search.trim().toLowerCase();
-    return (!q || [d.name, d.branch, d.lead?.name ?? ''].some(value => value.toLowerCase().includes(q))) &&
+    const b=organization?.branches.find(b=>b.id===d.branchId);
+    return (branchFilter==='All branches'||d.branch===branchFilter)&&(unit==='All business units'||b?.businessUnit===unit)&&(brand==='All brands'||b?.brand===brand)&&(!q || [d.name, d.branch, d.lead?.name ?? ''].some(value => value.toLowerCase().includes(q))) &&
       (status === 'All statuses' || d.active === (status === 'Active'));
-  }), [organization, search, status]);
+  }), [organization, search, status,unit,brand,branchFilter]);
   const isBranch = kind === 'branches';
   function saved() {
     setEditor(undefined);
@@ -226,12 +239,20 @@ export default function AdministrationOrganization({ kind, onChanged }: {
     void load(); onChanged();
   }
   return <>
+    {isBranch&&organization&&<div className="am-toolbar" style={{flexWrap:'wrap'}}>
+      {(['businessUnits','brands'] as const).map(k=><div key={k} style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}><strong>{k==='businessUnits'?'Business units':'Brands'}</strong>
+        {organization[k].map(g=><Button key={g.id} onClick={()=>setGroupEdit({kind:k,group:g})}>{g.name}{!g.active?' (Inactive)':''}</Button>)}
+        {canManage&&<Button onClick={()=>setGroupEdit({kind:k,group:null})}>+ Add {k==='businessUnits'?'unit':'brand'}</Button>}</div>)}
+    </div>}
     <div className="am-toolbar">
       <SearchInput className="am-search" aria-label={isBranch ? 'Search branches' : 'Search departments'}
         placeholder={isBranch ? 'Search branches, codes, managers...' : 'Search departments, branches, leads...'}
         value={search} onChange={event => setSearch(event.target.value)}/>
       <Select label="Filter status" options={['All statuses', 'Active', 'Inactive']}
         value={status} onChange={setStatus}/>
+      {organization&&<><Select label="Filter business unit" value={unit} options={['All business units',...organization.businessUnits.map(g=>g.name)]} onChange={v=>{setUnit(v);setBrand('All brands');setBranchFilter('All branches');}}/>
+      <Select label="Filter brand" value={brand} options={['All brands',...organization.brands.filter(g=>unit==='All business units'||organization.branches.some(b=>b.brandId===g.id&&b.businessUnit===unit)).map(g=>g.name)]} onChange={v=>{setBrand(v);setBranchFilter('All branches');}}/>
+      {!isBranch&&<Select label="Filter branch" value={branchFilter} options={['All branches',...organization.branches.filter(b=>(unit==='All business units'||b.businessUnit===unit)&&(brand==='All brands'||b.brand===brand)).map(b=>b.name)]} onChange={setBranchFilter}/>}</>}
       <span className="am-spacer"/>
       {canManage && <Button variant="primary" icon={<Plus size={16}/>}
         onClick={() => setEditor(null)}>{isBranch ? 'Add branch' : 'Add department'}</Button>}
@@ -242,7 +263,7 @@ export default function AdministrationOrganization({ kind, onChanged }: {
         <thead>{isBranch ? <tr><th>BRANCH</th><th>CITY</th><th>MANAGER</th><th>EMPLOYEES</th><th>ASSETS</th><th>STATUS</th><th>ACTIONS</th></tr> :
           <tr><th>DEPARTMENT</th><th>DEPARTMENT LEAD</th><th>PRIMARY BRANCH</th><th>MEMBERS</th><th>STATUS</th><th>ACTIONS</th></tr>}</thead>
         <tbody>{isBranch ? branches.map(b => <tr key={b.id}>
-          <td><strong>{b.name}</strong><small>{b.code}</small></td>
+          <td><strong>{b.name}</strong><small>{b.code} · {b.kind} · {b.businessUnit??'Unclassified'}{b.brand?' / '+b.brand:''}</small></td>
           <td className="am-muted">{b.city || '—'}</td>
           <td className="am-muted">{b.manager?.name || 'Unassigned'}</td>
           <td>{b.employees}</td><td>{b.assets}</td><td><State active={b.active}/></td>
@@ -261,8 +282,15 @@ export default function AdministrationOrganization({ kind, onChanged }: {
       'Branch scope is enforced by the API. Employee and asset counts reflect actual records.' :
       'Each department belongs to one branch. Members and leads reflect stored organizational data.'}
     </div>
+    {groupEdit&&<GroupEditor key={groupEdit.group?.id??groupEdit.kind} kind={groupEdit.kind} group={groupEdit.group} canManage={canManage} close={()=>setGroupEdit(null)} saved={()=>{setGroupEdit(null);toast.success('Organization group saved');void load();}}/>}
     {organization && editor !== undefined &&
       <Editor key={editor?.id ?? 'new'} kind={kind} organization={organization} selected={editor}
         canManage={canManage} close={() => setEditor(undefined)} saved={saved}/>}
   </>;
+}
+
+function GroupEditor({kind,group,canManage,close,saved}:{kind:'businessUnits'|'brands';group:Group|null;canManage:boolean;close:()=>void;saved:()=>void}){
+ const [name,setName]=useState(group?.name??'');const [active,setActive]=useState(group?.active??true);const [busy,setBusy]=useState(false);const [error,setError]=useState('');
+ async function save(){setBusy(true);try{await api('/groups/'+kind+(group?'/'+group.id:''),{method:group?'PATCH':'POST',body:{name,active}});saved();}catch(e){setError(e instanceof Error?e.message:'Unable to save group');}finally{setBusy(false);}}
+ return <Dialog title={(group?'Edit ':'Add ')+(kind==='brands'?'brand':'business unit')} subtitle="Manage the organizational grouping of physical branches." close={busy?()=>{}:close} footer={<><Button disabled={busy} onClick={close}>Close</Button><span className="am-spacer"/>{canManage&&<Button variant="primary" disabled={busy||name.trim().length<2} onClick={()=>void save()}>Save</Button>}</>}><Field label="Name"><Input readOnly={!canManage} value={name} onChange={e=>setName(e.target.value)}/></Field><Field label="Status"><Select label="Status" value={active?'Active':'Inactive'} options={['Active','Inactive']} onChange={v=>setActive(v==='Active')}/></Field>{error&&<p className="am-error" role="alert">{error}</p>}</Dialog>;
 }

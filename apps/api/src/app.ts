@@ -9,6 +9,7 @@ import adminRolesRouter from './routes/admin-roles.js';
 import adminOrganizationRouter from './routes/admin-organization.js';
 import resourcesRouter from './routes/resources.js';
 import assignmentsRouter from './routes/assignments.js';
+import organizationCatalog from './routes/organization-catalog.js';
 import approvalsRouter from './routes/approvals.js';
 import { csrfGuard } from './security/auth.js';
 
@@ -26,6 +27,7 @@ app.get('/api/health', (_req, res) => {
 
 app.use('/api/v1', csrfGuard);
 app.use('/api/v1/auth', authRouter);
+app.use('/api/v1/organization', organizationCatalog);
 app.use('/api/v1/admin', adminUsersRouter);
 app.use('/api/v1/admin', adminRolesRouter);
 app.use('/api/v1/admin', adminOrganizationRouter);

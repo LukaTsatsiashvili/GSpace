@@ -1,3 +1,4 @@
+import { OrganizationFilters,useOrganizationFilter } from '../components/OrganizationFilters';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ArrowDownToLine, ArrowLeftRight, CheckCheck, ClipboardList, Clock3, Filter, Plus, X } from 'lucide-react';
 import { Badge, Button, Card, Checkbox, Input, NumberInput, PageHeader, SearchInput, SectionTabs, Select, Textarea } from '../components/ui';
@@ -294,6 +295,7 @@ export default function ApprovalsLive() {
   const [search,setSearch] = useState('');
   const [status,setStatus] = useState('All statuses');
   const [typeFilter,setTypeFilter] = useState('All types');
+  const organizationFilter=useOrganizationFilter();
   const [lookups,setLookups] = useState<ApprovalLookups | null>(null);
   const [types,setTypes] = useState<ApprovalTypeRecord[]>([]);
   const [requests,setRequests] = useState<ApprovalRequestRecord[]>([]);
@@ -320,8 +322,8 @@ export default function ApprovalsLive() {
     const withinTab = tab !== 'My requests / reviews' || r.requesterId === user.id || r.reviews.some(v => v.reviewerId === user.id);
     const term = search.trim().toLowerCase();
     return withinTab && (!term || [r.code,r.title,r.requester,r.branch,r.type].some(v => v.toLowerCase().includes(term))) &&
-      (status === 'All statuses' || r.status === status) && (typeFilter === 'All types' || r.type === typeFilter);
-  }),[tab,requests,user.id,search,status,typeFilter]);
+      (status === 'All statuses' || r.status === status) && (typeFilter === 'All types' || r.type === typeFilter) && organizationFilter.matches(r.branchId);
+  }),[tab,requests,user.id,search,status,typeFilter,organizationFilter]);
   const mine = requests.filter(r => r.canReview).length;
   const inReview = requests.filter(r => r.status === 'PENDING').length;
   const approved = requests.filter(r => r.status === 'APPROVED').length;
@@ -350,7 +352,7 @@ export default function ApprovalsLive() {
     </div>
     <Card className="ap-catalog">
       <SectionTabs tabs={tabs} selected={tab} counts={{'My requests / reviews':mine}}
-        onChange={value => {setTab(value as Tab); setSearch('');setStatus('All statuses');setTypeFilter('All types');}}/>
+        onChange={value => {setTab(value as Tab); setSearch('');setStatus('All statuses');setTypeFilter('All types');organizationFilter.reset();}}/>
       {tab === 'Request types' ? <div className="ap-types-content"><div className="ap-types-heading">
         <div><h2>Configurable request types</h2><p>New versions do not modify existing requests.</p></div>
         {lookups?.canConfigure && <Button variant="primary" icon={<Plus size={16}/>} onClick={() => setTypeEditor('new')}>New request type</Button>}</div>
@@ -366,10 +368,10 @@ export default function ApprovalsLive() {
         <div className="ap-toolbar">
           <SearchInput className="ap-search" placeholder="Search requests, people, IDs..." aria-label="Search approval requests"
             value={search} onChange={e => setSearch(e.target.value)}/>
-          <Select className="ap-filter-select" label="Filter status" value={status} options={statuses} onChange={setStatus}/>
+          <OrganizationFilters filter={organizationFilter}/><Select className="ap-filter-select" label="Filter status" value={status} options={statuses} onChange={setStatus}/>
           <Select className="ap-filter-select" label="Filter request type" value={typeFilter}
             options={['All types',...types.map(t => t.name)]} onChange={setTypeFilter}/>
-          <span className="ap-toolbar-fill"/><Button onClick={() => {setSearch('');setStatus('All statuses');setTypeFilter('All types');}}>Clear filters</Button>
+          <span className="ap-toolbar-fill"/><Button onClick={() => {setSearch('');setStatus('All statuses');setTypeFilter('All types');organizationFilter.reset();}}>Clear filters</Button>
         </div>
         <div className="ap-table-scroll"><table className="ap-table"><thead><tr><th>REQUEST</th><th>REQUESTER</th><th>TYPE</th>
           <th>SUBMITTED / DUE</th><th>CURRENT STEP</th><th>STATUS</th><th/></tr></thead>

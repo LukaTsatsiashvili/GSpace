@@ -1,0 +1,7 @@
+CREATE TABLE "BusinessUnit" ("id" TEXT PRIMARY KEY, "name" TEXT NOT NULL UNIQUE, "active" BOOLEAN NOT NULL DEFAULT true);
+CREATE TABLE "Brand" ("id" TEXT PRIMARY KEY, "name" TEXT NOT NULL UNIQUE, "active" BOOLEAN NOT NULL DEFAULT true);
+ALTER TABLE "Branch" ADD COLUMN "kind" TEXT NOT NULL DEFAULT 'LEGACY', ADD COLUMN "businessUnitId" TEXT, ADD COLUMN "brandId" TEXT;
+ALTER TABLE "Branch" ADD CONSTRAINT "Branch_kind_check" CHECK ("kind" IN ('LEGACY','OFFICE','STORE','WAREHOUSE','OTHER'));
+ALTER TABLE "Branch" ADD CONSTRAINT "Branch_businessUnitId_fkey" FOREIGN KEY ("businessUnitId") REFERENCES "BusinessUnit"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "Branch" ADD CONSTRAINT "Branch_brandId_fkey" FOREIGN KEY ("brandId") REFERENCES "Brand"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+CREATE INDEX "Branch_businessUnitId_brandId_idx" ON "Branch"("businessUnitId","brandId");

@@ -1,3 +1,4 @@
+import { canLoginAtBranch } from './organization-policy.js';
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
 import { db } from '../db.js';
@@ -129,7 +130,7 @@ export const requireAuth: RequestHandler = async (req, res, next: NextFunction) 
     if (!session || session.revokedAt || session.expiresAt <= now ||
         session.lastSeenAt.getTime() + idleMs <= now.getTime() ||
         !session.user.active || !session.user.branch.active || !session.user.role.active ||
-        session.user.role.key === 'EMPLOYEE' || session.user.credential?.loginDisabled) {
+        !canLoginAtBranch(session.user.role.key,session.user.branch.kind) || session.user.credential?.loginDisabled) {
       clearSessionCookie(res);
       res.status(401).json({ error: { code: 'SESSION_EXPIRED', message: 'Session expired or revoked' } });
       return;

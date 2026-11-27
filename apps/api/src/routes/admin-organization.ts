@@ -13,6 +13,7 @@ function fail(res: Response, status: number, code: string, message: string) {
 const id = z.string().uuid();
 const name = z.string().trim().min(2).max(120);
 const branchFields = z.object({
+  kind:z.enum(['LEGACY','OFFICE','STORE','WAREHOUSE','OTHER']).optional(), businessUnitId:id.nullable().optional(), brandId:id.nullable().optional(),
   name, city: z.string().trim().max(120), managerId: id.nullable(), active: z.boolean()
 }).strict();
 const createBranchFields = branchFields.extend({
@@ -23,6 +24,7 @@ const departmentFields = z.object({
 }).strict();
 
 const branchInclude = {
+  businessUnit:true, brand:true,
   manager: { select: { id: true, fullName: true } },
   _count: { select: { users: true, resources: true, departments: true } }
 } satisfies Prisma.BranchInclude;
@@ -32,7 +34,7 @@ const departmentInclude = {
   _count: { select: { users: true } }
 } satisfies Prisma.DepartmentInclude;
 const serializeBranch = (row: Prisma.BranchGetPayload<{ include: typeof branchInclude }>) => ({
-  id: row.id, code: row.code, name: row.name, city: row.city, active: row.active,
+  id: row.id, code: row.code, name: row.name, city: row.city, active: row.active, kind:row.kind,businessUnitId:row.businessUnitId,brandId:row.brandId,businessUnit:row.businessUnit?.name??null,brand:row.brand?.name??null,
   manager: row.manager ? { id: row.manager.id, name: row.manager.fullName } : null,
   employees: row._count.users, assets: row._count.resources, departments: row._count.departments
 });
@@ -69,6 +71,7 @@ function knownError(res: Response, err: unknown, mapping: Record<string, [number
   const message = err instanceof Error ? err.message : '';
   const found = mapping[message];
   if (found) { fail(res, found[0], message, found[1]); return true; }
+  if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2034') {fail(res,409,'CONCURRENT_UPDATE','Reload and retry the change');return true;}
   if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
     fail(res, 409, 'ALREADY_EXISTS', conflict); return true;
   }
@@ -91,19 +94,56 @@ router.get('/organization', run(async (_req, res) => {
     }),
     db.user.findMany({
       where: global ? { active: true } : { active: true, branchId: actor.branchId },
-      select: { id: true, fullName: true, email: true, branchId: true },
+      select: { id: true, fullName: true, email: true, branchId: true,role:{select:{key:true}} },
       orderBy: { fullName: 'asc' }
     })
   ]);
   res.json({
+    businessUnits:await db.businessUnit.findMany({orderBy:{name:'asc'}}),brands:await db.brand.findMany({orderBy:{name:'asc'}}),
     branches: branches.map(serializeBranch),
     departments: departments.map(serializeDepartment),
     users: users.map(user => ({
-      id: user.id, name: user.fullName, email: user.email, branchId: user.branchId
+      id: user.id, name: user.fullName, email: user.email, branchId: user.branchId,roleKey:user.role.key
     }))
   });
 }));
 
+async function validateClassification(tx:Prisma.TransactionClient, data:{kind?:string;businessUnitId?:string|null;brandId?:string|null;managerId:string|null},branchId?:string){
+  if(data.kind && data.kind!=='LEGACY' && !data.businessUnitId)throw Error('INVALID_CLASSIFICATION');
+  if(data.kind==='STORE'&&!data.brandId)throw Error('INVALID_CLASSIFICATION');
+  if(data.businessUnitId&&!await tx.businessUnit.findFirst({where:{id:data.businessUnitId,active:true}}))throw Error('INVALID_CLASSIFICATION');
+  if(data.brandId&&!await tx.brand.findFirst({where:{id:data.brandId,active:true}}))throw Error('INVALID_CLASSIFICATION');
+  if(data.kind==='STORE' && branchId){
+    if(await tx.user.count({where:{branchId,role:{key:{notIn:['BRANCH_MANAGER','EMPLOYEE']}}}}))throw Error('STORE_ROLE_CONFLICT');
+    if(data.managerId&&!await tx.user.findFirst({where:{id:data.managerId,branchId,active:true,role:{key:'BRANCH_MANAGER'}}}))throw Error('INVALID_MANAGER');
+  }
+}
+const groupFields=z.object({name,active:z.boolean()}).strict();
+router.post('/organization/groups/:kind',writePermission,run(async(req,res)=>{
+  const input=groupFields.parse(req.body);const kind=req.params.kind;
+  if(!['businessUnits','brands'].includes(kind)){fail(res,404,'NOT_FOUND','Unknown organization group');return;}
+  try{const row=await db.$transaction(async tx=>{
+    const exists=kind==='businessUnits'?await tx.businessUnit.findFirst({where:{name:{equals:input.name,mode:'insensitive'}}}):await tx.brand.findFirst({where:{name:{equals:input.name,mode:'insensitive'}}});
+    if(exists)throw Error('GROUP_EXISTS');
+    const group=kind==='businessUnits'?await tx.businessUnit.create({data:input}):await tx.brand.create({data:input});
+    await tx.securityAuditEvent.create({data:{action:'ADMIN_ORGANIZATION_GROUP_CREATED',success:true,actorUserId:principal(res).userId,details:JSON.stringify({kind,group})}});return group;
+  },{isolationLevel:Prisma.TransactionIsolationLevel.Serializable});res.status(201).json(row);}
+  catch(e){if(!knownError(res,e,{GROUP_EXISTS:[409,'Group name already exists']},'Group name already exists'))throw e;}
+}));
+router.patch('/organization/groups/:kind/:id',writePermission,run(async(req,res)=>{
+  const input=groupFields.parse(req.body);const key=id.parse(req.params.id);const kind=req.params.kind;
+  if(!['businessUnits','brands'].includes(kind)){fail(res,404,'NOT_FOUND','Unknown organization group');return;}
+  try{await db.$transaction(async tx=>{
+    const before=kind==='businessUnits'?await tx.businessUnit.findUnique({where:{id:key}}):await tx.brand.findUnique({where:{id:key}});
+    if(!before)throw Error('GROUP_NOT_FOUND');
+    const nameWhere={id:{not:key},name:{equals:input.name,mode:'insensitive' as const}};
+    if(kind==='businessUnits'?await tx.businessUnit.findFirst({where:nameWhere}):await tx.brand.findFirst({where:nameWhere}))throw Error('GROUP_EXISTS');
+    if(!input.active&&await tx.branch.count({where:{active:true,...(kind==='businessUnits'?{businessUnitId:key}:{brandId:key})}}))throw Error('GROUP_IN_USE');
+    if(kind==='businessUnits')await tx.businessUnit.update({where:{id:key},data:input});else await tx.brand.update({where:{id:key},data:input});
+    await tx.securityAuditEvent.create({data:{action:'ADMIN_ORGANIZATION_GROUP_UPDATED',success:true,actorUserId:principal(res).userId,details:JSON.stringify({kind,key,before,after:input})}});
+  },{isolationLevel:Prisma.TransactionIsolationLevel.Serializable});res.json({ok:true});}
+  catch(e){if(!knownError(res,e,{GROUP_NOT_FOUND:[404,'Group not found'],GROUP_EXISTS:[409,'Group name already exists'],GROUP_IN_USE:[409,'Group has active branches']},'Group name already exists'))throw e;}
+}));
 router.post('/organization/branches', writePermission, run(async (req, res) => {
   const input = createBranchFields.safeParse(req.body);
   if (!input.success) { fail(res, 400, 'INVALID_INPUT', 'Check branch name, code, city, manager and status'); return; }
@@ -111,16 +151,19 @@ router.post('/organization/branches', writePermission, run(async (req, res) => {
     const branch = await db.$transaction(async tx => {
       if (await nameUsed(tx, 'branch', input.data.name)) throw Error('BRANCH_EXISTS');
       if (input.data.managerId) throw Error('MANAGER_BRANCH_MISMATCH');
+      await validateClassification(tx,input.data);
       const created = await tx.branch.create({ data: input.data });
       await tx.securityAuditEvent.create({ data: {
         action: 'ADMIN_BRANCH_CREATED', success: true, actorUserId: principal(res).userId,
         details: JSON.stringify({ id: created.id, code: created.code, after: input.data })
       } });
       return created;
-    });
+    },{isolationLevel:Prisma.TransactionIsolationLevel.Serializable});
     res.status(201).json({ id: branch.id });
   } catch (err) {
     if (knownError(res, err, {
+      INVALID_CLASSIFICATION:[400,'Select a business unit and a brand for stores'],
+      STORE_ROLE_CONFLICT:[409,'Move or change incompatible user roles before classifying as a store'],
       BRANCH_EXISTS: [409, 'A branch with this name already exists'],
       MANAGER_BRANCH_MISMATCH: [400, 'Create a branch first, then assign a manager from that branch']
     }, 'Branch code already exists')) return;
@@ -136,6 +179,8 @@ router.patch('/organization/branches/:branchId', writePermission, run(async (req
       const before = await tx.branch.findUnique({ where: { id: key.data } });
       if (!before) throw Error('BRANCH_NOT_FOUND');
       if (await nameUsed(tx, 'branch', input.data.name, undefined, before.id)) throw Error('BRANCH_EXISTS');
+      if(before.kind!=='LEGACY'&&input.data.kind==='LEGACY')throw Error('INVALID_CLASSIFICATION');
+      await validateClassification(tx,{...before,...input.data},before.id);
       if (!await validLeader(tx, input.data.managerId, before.id)) throw Error('INVALID_MANAGER');
       if (!input.data.active) {
         const [users, assets, departments] = await Promise.all([
@@ -150,15 +195,17 @@ router.patch('/organization/branches/:branchId', writePermission, run(async (req
         action: 'ADMIN_BRANCH_UPDATED', success: true, actorUserId: principal(res).userId,
         details: JSON.stringify({
           id: before.id, code: before.code,
-          before: { name: before.name, city: before.city, managerId: before.managerId, active: before.active },
+          before: { name: before.name, city: before.city, managerId: before.managerId, active: before.active,kind:before.kind,businessUnitId:before.businessUnitId,brandId:before.brandId },
           after: input.data
         })
       } });
-    });
+    },{isolationLevel:Prisma.TransactionIsolationLevel.Serializable});
     res.json({ ok: true });
   } catch (err) {
     if (knownError(res, err, {
       BRANCH_NOT_FOUND: [404, 'Branch not found'],
+      INVALID_CLASSIFICATION:[400,'Select a business unit and a brand for stores'],
+      STORE_ROLE_CONFLICT:[409,'Move or change active non-manager login roles before classifying as a store'],
       BRANCH_EXISTS: [409, 'A branch with this name already exists'],
       INVALID_MANAGER: [400, 'Manager must be an active employee of the same branch'],
       BRANCH_IN_USE: [409, 'Move or deactivate active users, departments and resources before disabling this branch']
