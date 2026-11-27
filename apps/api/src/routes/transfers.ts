@@ -44,7 +44,7 @@ router.get('/lookups',run(async(_req,res)=>{
  manage(a)?db.user.findMany({where:{active:true,branch:{active:true},role:{active:true},OR:[{role:{key:{not:'EMPLOYEE'},grants:{some:{permission:{key:'transfers.manage'}}}}},{role:{key:'EMPLOYEE'},ledDepartments:{some:{active:true}}}]},include:{branch:true,role:{include:{grants:{include:{permission:true}}}},ledDepartments:leadAccessInclude}}):[],
  db.department.findMany({where:{active:true,branch:{active:true,kind:'OFFICE'}},select:{id:true,name:true,branchId:true}})
  ]);
- const people=users.filter(u=>canLoginUser(u)&&effectivePermissions(u,u.role.grants.map(g=>g.permission.key)).includes('transfers.manage')).flatMap(u=>{
+ const people=users.filter(u=>canLoginUser(u)&&effectivePermissions(u,u.role.grants.map(g=>g.permission.key)).includes('transfers.manage')).flatMap<{id:string;fullName:string;branchId:string;departmentId:string|null}>(u=>{
  const led=leadDepartments(u);
  return u.role.key==='EMPLOYEE'?led.map(departmentId=>({id:u.id,fullName:u.fullName,branchId:u.branchId,departmentId})):
  [{id:u.id,fullName:u.fullName,branchId:u.branchId,departmentId:null}];
@@ -59,7 +59,7 @@ router.post('/',run(async(req,res)=>{
  check(source(a,v),'Source branch access denied',403);check(v.route!=='Direct dispatch'||backOffice(a),'Direct dispatch requires back-office permission',403);
  const result=await tx(async t=>{
  const branches=await t.branch.count({where:{id:{in:[v.sourceId,v.destinationId]},active:true,kind:{not:'LEGACY'}}});check(branches===new Set([v.sourceId,v.destinationId]).size,'Choose classified, active physical branches',400);
- for(const [departmentId,branchId] of [[v.sourceDepartmentId,v.sourceId],[v.destinationDepartmentId,v.destinationId]])if(departmentId)check(await t.department.findFirst({where:{id:departmentId,branchId,active:true,branch:{kind:'OFFICE'}}}),'Invalid active office department',400);
+ for(const [departmentId,branchId] of ([[v.sourceDepartmentId,v.sourceId],[v.destinationDepartmentId,v.destinationId]] as const))if(departmentId)check(await t.department.findFirst({where:{id:departmentId,branchId,active:true,branch:{kind:'OFFICE'}}}),'Invalid active office department',400);
  const recipient=await t.user.findFirst({where:{id:v.recipientId,branchId:v.destinationId,active:true},include:{branch:true,role:{include:{grants:{include:{permission:true}}}},ledDepartments:leadAccessInclude}});
  check(recipient&&canLoginUser(recipient)&&effectivePermissions(recipient,recipient.role.grants.map(g=>g.permission.key)).includes('transfers.manage'),'Choose an authorized recipient in the destination',400);
  if(!recipient)throw new Conflict(400,'Recipient unavailable');
