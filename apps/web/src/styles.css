@@ -62,3 +62,11 @@
 .profile-action{cursor:pointer;border:0;padding:6px 9px;border-radius:11px;background:transparent;color:var(--text);text-align:left;min-width:0}
 .profile-action:hover,.profile-action:focus-visible{background:var(--surface2)}
 .profile-action:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* Administration owns one vertical content scroller; the topbar and sidebar stay in place. */
+.app.admin-scroll-shell{height:100dvh;min-height:0;overflow:hidden}
+.admin-scroll-shell>.main-area{display:flex;flex-direction:column;min-height:0;min-width:0}
+.admin-scroll-shell>.main-area>.topbar{flex:none}
+.admin-scroll-shell>.main-area>.content{flex:1;min-height:0;min-width:0;width:100%;margin:0 auto;overflow-y:auto;overflow-x:hidden;overscroll-behavior-y:contain}
+.admin-scroll-shell:has(.am-overlay)>.main-area>.content,.admin-scroll-shell:has(.am-notice-layer)>.main-area>.content{overflow-y:hidden}
+.dl-overview{display:grid;gap:18px}.dl-overview .ui-card{padding:20px}.dl-overview h2{font-size:15px;margin:0 0 16px}.dl-overview-list{display:grid;gap:10px}.dl-overview-row{display:flex;gap:12px;justify-content:space-between;align-items:center;flex-wrap:wrap;padding:10px 0;border-bottom:1px solid var(--border)}.dl-overview-row:last-child{border-bottom:0}.dl-overview-row small{color:var(--muted)}

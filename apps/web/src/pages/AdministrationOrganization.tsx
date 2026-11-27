@@ -1,3 +1,4 @@
+import { lockBodyScroll } from '../components/body-scroll-lock';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Plus, X } from 'lucide-react';
 import { Button, Input, SearchInput, Select } from '../components/ui';
@@ -42,13 +43,12 @@ function Dialog({ title, subtitle, close, children, footer }: {
   title: string; subtitle: string; close: () => void; children: ReactNode; footer: ReactNode;
 }) {
   useEffect(() => {
-    const old = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    const unlock=lockBodyScroll();
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && !document.querySelector('.ui-select-options')) close();
     };
     document.addEventListener('keydown', onKey);
-    return () => { document.removeEventListener('keydown', onKey); document.body.style.overflow = old; };
+    return () => { document.removeEventListener('keydown', onKey); unlock(); };
   }, [close]);
   return <div className="am-overlay am-center" onMouseDown={close}>
     <section className="am-modal am-form-modal" role="dialog" aria-modal="true" aria-label={title}

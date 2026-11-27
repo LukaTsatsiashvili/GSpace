@@ -1,3 +1,4 @@
+import { lockBodyScroll } from '../components/body-scroll-lock';
 import { OrganizationFilters,useOrganizationFilter } from '../components/OrganizationFilters';
 import { useCallback, useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { ArrowLeftRight, Check, Copy, X } from 'lucide-react';
@@ -10,7 +11,7 @@ type Branch = { id: string; name: string; kind?:string };
 type Department = { id: string; name: string; branchId?: string };
 type Account = {
   id: string; name: string; email: string; role: Role; branch: Branch;
-  department: Department | null; active: boolean; pendingActivation: boolean;
+  department: Department | null; active: boolean; pendingActivation: boolean;loginEligible?:boolean;leadDepartmentIds?:string[];
   phone: string; lastActive: string | null;
 };
 type Lookups = { roles: Role[]; branches: Branch[]; departments: Department[] };
@@ -53,13 +54,12 @@ function Modal({ title, description, close, children, footer, drawer = false }: 
   footer: ReactNode; drawer?: boolean;
 }) {
   useEffect(() => {
-    const old = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    const unlock=lockBodyScroll();
     const handler = (event: globalThis.KeyboardEvent) => {
       if (event.key === 'Escape' && !document.querySelector('.ui-select-options')) close();
     };
     document.addEventListener('keydown', handler);
-    return () => { document.removeEventListener('keydown', handler); document.body.style.overflow = old; };
+    return () => { document.removeEventListener('keydown', handler); unlock(); };
   }, [close]);
   return <div className={'am-overlay ' + (drawer ? '' : 'am-center')} onMouseDown={close}>
     <section className={'am-modal ' + (drawer ? 'am-drawer' : 'am-form-modal')} role="dialog" aria-modal="true"
@@ -190,9 +190,9 @@ function ResetDialog({ user, close, saved }: {
     } catch (err) { setError(err instanceof Error ? err.message : 'Unable to reset credentials.'); }
     finally { setPending(false); }
   }
-  return <Modal title="Reset employee password" description={user.name + ' · ' + user.email} close={close}
+  return <Modal title={user.pendingActivation?'Activate employee account':'Reset employee password'} description={user.name + ' · ' + user.email} close={close}
     footer={<><Button onClick={close}>Cancel</Button><span className="am-spacer"/>
-      <Button variant="primary" disabled={pending} onClick={() => void reset()}>{pending ? 'Processing...' : 'Issue reset link'}</Button></>}>
+      <Button variant="primary" disabled={pending} onClick={() => void reset()}>{pending ? 'Processing...' : user.pendingActivation?'Issue activation link':'Issue reset link'}</Button></>}>
     <div className="am-form-grid">
       <Field label="Employee"><Input readOnly value={user.name}/></Field>
       <Field label="Session policy"><Input readOnly value="Revoke all active sessions"/></Field>
@@ -211,14 +211,14 @@ function AccountDetails({ user, close, onEdit, onReset }: {
   const { user: me } = useAuth();
   return <Modal drawer title={user.name} description={'Employee account · ' + user.id} close={close}
     footer={<><Button onClick={close}>Close</Button><span className="am-spacer"/>
-      <Button onClick={onReset} disabled={!user.active || user.id === me.id}>Reset password</Button>
+      <Button onClick={onReset} disabled={!user.active || user.id === me.id || user.loginEligible===false}>{user.pendingActivation?'Set / activate password':'Reset password'}</Button>
       <Button variant="primary" onClick={onEdit}>Edit account</Button></>}>
     <div className="am-detail-pills"><Status user={user}/>
-      {user.role.protected && <span className="am-status protected">Protected</span>}</div>
+      {!!user.leadDepartmentIds?.length&&<span className="am-status active">Department Lead</span>}{user.role.protected && <span className="am-status protected">Protected</span>}</div>
     <div className="am-summary">
       {[
         ['Email', user.email], ['Role', user.role.name], ['Branch', user.branch.name],
-        ['Department', user.department?.name || '—'], ['Phone', user.phone || '—'],
+        ['Department', user.department?.name || '—'],['Login access',user.loginEligible?'Allowed':'Directory only'], ['Phone', user.phone || '—'],
         ['Last active', user.lastActive ? new Date(user.lastActive).toLocaleString() : 'Never']
       ].map(([label, value]) => <div className="am-display-field" key={label}><small>{label}</small><strong>{value}</strong></div>)}
     </div>
