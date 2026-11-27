@@ -225,7 +225,7 @@ function TypeForm({ initial, lookups, close, saved }: {
     <p className="ap-compact-hint">Reviewer roles resolve to actual active users in the request's branch when the request is submitted. Requesters cannot approve their own requests. Historical requests keep their original route and form version.</p>
   </Modal>;
 }
-function RequestDetails({ item, close, refresh }: { item: ApprovalRequestRecord; close: () => void; refresh: () => Promise<void> }) {
+function RequestDetails({ item, lookups, close, refresh }: { item: ApprovalRequestRecord; lookups: ApprovalLookups; close: () => void; refresh: () => Promise<void> }) {
   const toast = useToast();
   const [decision, setDecision] = useState<'APPROVED'|'REJECTED'|'CHANGES_REQUESTED'>('APPROVED');
   const [comment, setComment] = useState('');
@@ -283,9 +283,7 @@ function RequestDetails({ item, close, refresh }: { item: ApprovalRequestRecord;
   {resubmitOpen && <RequestForm previous={item} types={[{ id:item.typeId, code:item.typeCode, name:item.type,
       description:'',active:true,version:item.version,beneficiaryRequired:item.beneficiaryRequired,
       fields:item.fields,steps:item.steps,deadlineDays:3 }]}
-      lookups={{ branches:[{id:item.branchId,name:item.branch}], employees: item.beneficiaryId ? [
-        { id: item.beneficiaryId, fullName: item.beneficiary ?? 'Employee', branchId: item.branchId }
-      ] : [], users:[], roles:[],canConfigure:false,canExport:false }}
+      lookups={lookups}
       close={() => setResubmitOpen(false)} saved={async () => { close(); await refresh(); }}/>}
   </>;
 }
@@ -397,6 +395,6 @@ export default function ApprovalsLive() {
     {lookups && create && <RequestForm types={types} lookups={lookups} close={() => setCreate(false)} saved={reload}/>}
     {lookups && typeEditor && <TypeForm initial={typeEditor === 'new' ? undefined : typeEditor} lookups={lookups}
       close={() => setTypeEditor(null)} saved={reload}/>}
-    {details && <RequestDetails item={details} close={() => setDetails(null)} refresh={reload}/>}
+    {details && lookups && <RequestDetails item={details} lookups={lookups} close={() => setDetails(null)} refresh={reload}/>}
   </div>;
 }
