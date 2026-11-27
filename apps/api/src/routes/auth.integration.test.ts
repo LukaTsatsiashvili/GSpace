@@ -777,7 +777,7 @@ test('session login, CSRF, RBAC directory read and logout', { skip: !process.env
     assert.equal((await loginWith('A1bcde')).status, 401);
     assert.equal((await loginWith('A1bcdef')).status, 200);
     assert.ok((await db.securityAuditEvent.count({
-      where: { action: 'AUTH_PASSWORD_CHANGED', actorUserId: employee.id }
+      where: { action: 'AUTH_PASSWORD_CHANGED', actorUserId: resetTarget.id }
     })) >= 1);
 
 
