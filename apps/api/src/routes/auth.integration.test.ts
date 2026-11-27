@@ -462,6 +462,17 @@ test('session login, CSRF, RBAC directory read and logout', { skip: !process.env
     });
     assert.equal(loginEmployee.status, 401); // Employee is a resource custodian, not an app user.
     const employeeCookies = csrfCookie; // No authenticated employee session exists.
+    const createEmployeeDirectory = await fetch(base + '/api/v1/admin/users', {
+      method: 'POST', headers: { cookie: both, 'content-type': 'application/json', 'x-csrf-token': csrf.csrfToken },
+      body: JSON.stringify({
+        name: 'Directory Only Custodian', email: 'no-login-custodian@example.test',
+        roleId: employeeRole.id, branchId: adminIdentity.branchId, departmentId: null, active: true
+      })
+    });
+    assert.equal(createEmployeeDirectory.status, 201);
+    const directoryRecord = await createEmployeeDirectory.json() as { userId: string; activationPath: string | null };
+    assert.equal(directoryRecord.activationPath, null);
+    assert.equal((await db.userCredential.findUnique({ where: { userId: directoryRecord.userId } })), null);
     // Persisted assignments: issue, recipient acknowledgement, and verified return.
     const assignmentWrite = (suffix: string, cookies: string, body: object) =>
       fetch(base + '/api/v1/assignments' + suffix, {
@@ -558,6 +569,13 @@ test('session login, CSRF, RBAC directory read and logout', { skip: !process.env
       onBehalfOf: true, decisions: [{ itemId: item.id, decision: 'ACCEPT', notes: 'Manager witnessed physical handover',
         evidence: { filename: 'receipt.png', mimeType: 'image/png', base64: tinyPng } }]
     })).status, 200);
+    const witnessedEvent = await db.assignmentEvent.findFirstOrThrow({
+      where: { assignmentId, action: 'ACCEPTED' }
+    });
+    assert.equal((witnessedEvent.details as { confirmationMode: string }).confirmationMode,
+      'MANAGER_RECORDED_PHYSICAL_HANDOVER');
+    assert.equal((witnessedEvent.details as { recipientId: string }).recipientId, employee.id);
+    assert.equal(witnessedEvent.actorId, scopedManager.id);
     assert.equal((await fetch(base + '/api/v1/assignments/' + assignmentId +
       '/items/' + item.id + '/evidence', { headers: { cookie: managerCookies } })).status, 200);
     assert.equal((await assignmentWrite('/' + assignmentId + '/receipt', managerCookies, {
@@ -825,6 +843,11 @@ test('session login, CSRF, RBAC directory read and logout', { skip: !process.env
       ]
     };
     assert.equal((await approvalWrite('/types', managerCookies, approvalConfig)).status, 403);
+    // A mistakenly granted review permission never overrides Branch Manager exclusion.
+    const approvalReviewPermission = await db.permission.findUniqueOrThrow({ where: { key: 'approvals.review' } });
+    await db.rolePermission.create({ data: {
+      roleId: scopedRole.id, permissionId: approvalReviewPermission.id
+    } });
     // Even with an old or misconfigured grant, a Branch Manager cannot approve.
     assert.equal((await approvalWrite('/types', both, {
       ...approvalConfig, steps: [{ mode: 'ANY', targets: [{ kind: 'USER', id: scopedManager.id }] }]
@@ -940,6 +963,9 @@ test('session login, CSRF, RBAC directory read and logout', { skip: !process.env
     assert.ok((await db.securityAuditEvent.count({
       where: { action: 'APPROVAL_REQUESTS_EXPORTED' }
     })) >= 1);
+    await db.rolePermission.delete({ where: {
+      roleId_permissionId: { roleId: scopedRole.id, permissionId: approvalReviewPermission.id }
+    } });
 
     const logout = await fetch(base + '/api/v1/auth/logout', {
       method: 'POST', headers: { cookie: both, 'content-type': 'application/json', 'x-csrf-token': csrf.csrfToken }, body: '{}'
