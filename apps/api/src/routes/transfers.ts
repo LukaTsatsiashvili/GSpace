@@ -5,9 +5,10 @@ import { db } from '../db.js';
 import { principal, requireAuth, type AuthPrincipal } from '../security/auth.js';
 const router = Router();
 const id = z.string().uuid();
-const central = (a: AuthPrincipal) => ['SYSTEM_ADMIN','COMPANY_ADMIN','ASSET_MANAGER'].includes(a.roleKey);
+const central = (a: AuthPrincipal) => ['SYSTEM_ADMIN','COMPANY_ADMIN'].includes(a.roleKey);
+const backOffice = (a:AuthPrincipal) => central(a)||a.roleKey==='ASSET_MANAGER';
 const manage = (a: AuthPrincipal) => a.permissions.includes('transfers.manage') && a.roleKey !== 'EMPLOYEE';
-const scope = (a: AuthPrincipal): Prisma.BranchTransferWhereInput => central(a) ? {} : { OR: [{sourceId:a.branchId},{destinationId:a.branchId}] };
+const scope = (a: AuthPrincipal): Prisma.BranchTransferWhereInput => central(a) || (a.roleKey==='ASSET_MANAGER' && manage(a)) ? {} : { OR: [{sourceId:a.branchId},{destinationId:a.branchId}] };
 const source = (a:AuthPrincipal,t:{sourceId:string}) => manage(a) && (central(a)||a.branchId===t.sourceId);
 const receiver = (a:AuthPrincipal,t:{destinationId:string;recipientId:string}) => manage(a) && (['SYSTEM_ADMIN','COMPANY_ADMIN'].includes(a.roleKey)|| (a.branchId===t.destinationId && (a.userId===t.recipientId||a.roleKey==='BRANCH_MANAGER')));
 class Conflict extends Error { constructor(public status:number,message:string){super(message);} }
@@ -17,7 +18,7 @@ async function tx<T>(fn:(t:Prisma.TransactionClient)=>Promise<T>){return db.$tra
 const include = {source:true,destination:true,sender:{select:{fullName:true}},recipient:{select:{fullName:true}},items:{include:{resource:true}},events:{orderBy:{createdAt:'desc' as const}}} satisfies Prisma.BranchTransferInclude;
 type Row = Prisma.BranchTransferGetPayload<{include:typeof include}>;
 function actions(a:AuthPrincipal,t:Row){
- const approve=manage(a)&&central(a)&&a.userId!==t.senderId&&t.status==='Pending approval';
+ const approve=manage(a)&&backOffice(a)&&a.userId!==t.senderId&&t.status==='Pending approval';
  return {approve,dispatch:source(a,t)&&t.status==='Ready to dispatch',cancel:source(a,t)&&['Pending approval','Ready to dispatch'].includes(t.status),arrive:receiver(a,t)&&t.status==='In transit',receipt:receiver(a,t)&&['Awaiting receipt','Partially received','Issue reported'].includes(t.status)};
 }
 function serialize(t:Row,a:AuthPrincipal){return {id:t.code,key:t.id,source:t.source.name,destination:t.destination.name,sender:t.sender.fullName,recipient:t.recipient.fullName,route:t.route,status:t.status,created:t.createdAt.toISOString(),reason:t.reason,actions:actions(a,t),items:t.items.map(i=>({id:i.resource.assetCode,key:i.id,name:i.resource.name,origin:t.source.name,condition:i.resource.condition,state:i.status==='RECEIVED'?'Received':i.status==='ISSUE'?'Issue reported':i.status==='CANCELLED'?'Cancelled':'Awaiting receipt',notes:i.notes,evidenceName:i.evidenceName})),activity:t.events.map(e=>({title:e.action+' · '+e.actorName,date:e.createdAt.toISOString(),notes:e.notes}))};}
@@ -40,14 +41,14 @@ router.get('/lookups',run(async(_req,res)=>{
  manage(a)?db.resource.findMany({where:{status:'AVAILABLE',branch:{active:true},...(central(a)?{}:{branchId:a.branchId})},select:{id:true,assetCode:true,name:true,branchId:true}}):[],
  manage(a)?db.user.findMany({where:{active:true,branch:{active:true},role:{active:true,key:{not:'EMPLOYEE'},grants:{some:{permission:{key:'transfers.manage'}}}}},select:{id:true,fullName:true,branchId:true}}):[]
  ]);
- res.json({branches,assets,people,canManage:manage(a),canDirect:manage(a)&&central(a),canExport:a.permissions.includes('reports.export'),ownBranchId:a.branchId,global:central(a)});
+ res.json({branches,assets,people,canManage:manage(a),canDirect:manage(a)&&backOffice(a),canExport:a.permissions.includes('reports.export'),ownBranchId:a.branchId,global:central(a)});
 }));
 router.get('/',run(async(_req,res)=>{const a=principal(res);const rows=await db.branchTransfer.findMany({where:scope(a),include,orderBy:{createdAt:'desc'},take:200});res.json({transfers:rows.map(t=>serialize(t,a))});}));
 router.post('/',run(async(req,res)=>{
  const a=principal(res);check(manage(a),'Transfer permission required',403);
  const v=z.object({sourceId:id,destinationId:id,recipientId:id,resourceIds:z.array(id).min(1).max(25),route:z.enum(['Manager approval','Direct dispatch']),reason:z.string().trim().min(1).max(2000)}).strict().parse(req.body);
  check(v.sourceId!==v.destinationId && new Set(v.resourceIds).size===v.resourceIds.length,'Invalid branches or duplicate resources',400);
- check(source(a,v),'Source branch access denied',403);check(v.route!=='Direct dispatch'||central(a),'Direct dispatch requires back-office permission',403);
+ check(source(a,v),'Source branch access denied',403);check(v.route!=='Direct dispatch'||backOffice(a),'Direct dispatch requires back-office permission',403);
  const result=await tx(async t=>{
  const branches=await t.branch.count({where:{id:{in:[v.sourceId,v.destinationId]},active:true}});check(branches===2,'Choose active branches',400);
  const recipient=await t.user.findFirst({where:{id:v.recipientId,branchId:v.destinationId,active:true,role:{active:true,key:{not:'EMPLOYEE'},grants:{some:{permission:{key:'transfers.manage'}}}}}});check(recipient,'Choose an authorized recipient in the destination',400);
@@ -89,9 +90,11 @@ router.post('/:key/receipt',run(async(req,res)=>{
  for(const d of decisions){const i=row.items.find(x=>x.id===d.itemId);if(!i||!['PENDING','ISSUE'].includes(i.status))throw new Conflict(409,'Item already resolved');check(i.resource.status==='IN_TRANSFER','Resource not reserved');
  const evidence=d.evidence?Buffer.from(d.evidence.base64,'base64'):undefined;
  if(evidence){const mime=d.evidence!.mimeType;check(evidence.length>0&&evidence.length<=2097152&&((mime==='image/jpeg'&&evidence[0]===255&&evidence[1]===216&&evidence[2]===255)||(mime==='image/png'&&evidence.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10])))||(mime==='image/webp'&&evidence.toString('ascii',0,4)==='RIFF'&&evidence.toString('ascii',8,12)==='WEBP')),'Invalid photo',400);}
+ if(i.status==='ISSUE'&&d.decision==='REPORT_ISSUE')throw new Conflict(409,'Issue already reported; resolve with acceptance and a note');
  if(d.decision==='REPORT_ISSUE'){check(d.notes.length>0,'Issue comment required',400);check(!(d.damaged||i.resource.condition==='Damaged')||evidence,'Damage requires photo',400);}
  if(i.status==='ISSUE'&&d.decision==='ACCEPT')check(d.notes.length>0,'Resolution note required',400);
  await t.branchTransferItem.update({where:{id:i.id},data:{status:d.decision==='ACCEPT'?'RECEIVED':'ISSUE',notes:d.notes,...(evidence?{evidence,evidenceName:d.evidence!.filename,evidenceMime:d.evidence!.mimeType}:{})}});
+ if(d.decision==='REPORT_ISSUE'&&d.damaged)await move(t,a,i.resource,{condition:'Damaged'},'TRANSFER_DAMAGE_REPORTED');
  if(d.decision==='ACCEPT')await move(t,a,i.resource,{status:'AVAILABLE',branchId:row.destinationId,location:'',...(d.damaged?{condition:'Damaged'}:{})},'TRANSFER_RECEIVED');
  await event(t,a,row.id,d.decision+' '+i.resource.assetCode,d.notes);
  }

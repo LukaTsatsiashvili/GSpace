@@ -80,6 +80,7 @@ export function NewTransferDialog({ close,lookups,onChanged }: { close: () => vo
   const review = () => {
     if (!source||!destination||source === destination) { setError('Source and destination locations must be different.'); return; }
     if (!people.some(p=>personLabel(p)===recipient)) { setError('Choose a transfer recipient.'); return; }
+    if (selected.length > 25) { setError('Select at most 25 resources.'); return; }
     if (selected.length === 0) { setError('Select at least one resource to transfer.'); return; }
     if (!reason.trim()) { setError('Please provide a transfer reason.'); return; }
     setError(''); setStep(2); bodyRef.current?.scrollTo({ top: 0 });
@@ -116,7 +117,7 @@ export function NewTransferDialog({ close,lookups,onChanged }: { close: () => vo
             <div><span>Recipient</span><strong>{recipient}</strong></div><div><span>Workflow</span><strong>{route}</strong></div>
           </div>
           <section className="tr-review-section"><h3>Selected resources</h3><div className="tr-resource-review-list">
-            {chosen.map(item => <AssetLine key={item.id} item={item} badge="Requires receipt"/>)}
+            {chosen.map(item => <AssetLine key={item.id} item={{id:item.assetCode,name:item.name}} badge="Requires receipt"/>)}
           </div></section>
           <section className="tr-review-section"><h3>Reason</h3><p className="tr-review-reason">{reason}</p></section>
           <p className="tr-info-hint">Creating reserves the selected resources; dispatch is a separate action.</p>
@@ -161,14 +162,14 @@ export function TransferReceiptDialog({ transfer, close,onChanged }: { transfer:
     <div className="tr-new-content">
       <div className="tr-receipt-items">{transfer.items.map(item => <div className="tr-receipt-item-wrap" key={item.id}>
         <div className="tr-receipt-item"><span className="tr-review-box"><Box size={17}/></span><div><strong>{item.name}</strong><small>{item.id} · {item.state}</small></div>
-          {preview || item.state==='Received' ? <span className="tr-receipt-choice">{decisions[item.id]}</span> : <Select label={'Receipt decision: ' + item.name} value={decisions[item.id]} options={receiptChoices} onChange={value => setDecisions(p => ({ ...p, [item.id]: value as ReceiptDecision }))}/>}
+          {preview || item.state==='Received' ? <span className="tr-receipt-choice">{decisions[item.id]}</span> : <Select label={'Receipt decision: ' + item.name} value={decisions[item.id]} options={item.state==='Issue reported'?['Accept','Decide later']:receiptChoices} onChange={value => setDecisions(p => ({ ...p, [item.id]: value as ReceiptDecision }))}/>}
         </div>
         {decisions[item.id] === 'Report issue' && !preview && <div className="tr-evidence"><label htmlFor={'tr-evidence-' + item.id}>Photo evidence (required for damage)</label>
           <Input id={'tr-evidence-' + item.id} type="file" accept="image/jpeg,image/png,image/webp" onChange={event => setFiles(p => ({ ...p, [item.id]: event.target.files?.[0] }))}/>
           <Checkbox checked={!!damage[item.id]} onChange={()=>setDamage(p=>({...p,[item.id]:!p[item.id]}))}/> Damaged<small>JPEG, PNG or WebP, max 2 MB.</small></div>}
         {preview && files[item.id] && <small className="tr-evidence-name">Selected photo: {files[item.id]?.name}</small>}
       </div>)}</div>
-      {preview ? <p className="tr-info-hint">These choices are not submitted. Unresolved items remain pending in the future production workflow.</p> : <>
+      {preview ? <p className="tr-info-hint">Confirm to save decisions; deferred items remain pending.</p> : <>
         <p className="tr-info-hint">Only a complete item-by-item acceptance can close the transfer. Reported issues require further manager review.</p>
         <FormField label="Notes (required for issues and resolution)"><Textarea rows={3} placeholder="Add context about the received items" value={notes} onChange={event => setNotes(event.target.value)}/></FormField>
       </>}
@@ -186,12 +187,12 @@ export function TransferDetails({ transfer, close, onReceipt,onChanged }: { tran
   async function apply(){setBusy(true);try{await api.action(transfer.key,action,note);toast.success('Transfer updated');setAction('');setNote('');onChanged();}catch(e){toast.error(e instanceof Error?e.message:'Action failed');}finally{setBusy(false);}}
   useDialogEscape(close);
   const complete = transfer.status === 'Completed';
-  const approved = transfer.status !== 'Pending approval';
+  const approved = !['Pending approval','Rejected','Cancelled'].includes(transfer.status);
   const inProgress = transfer.status === 'Awaiting receipt' || transfer.status === 'Partially received';
   const actionVisible = transfer.actions.receipt;
   const steps = [
     { title: 'Transfer initiated', detail: transfer.created + ' · ' + transfer.sender, done: true },
-    { title: transfer.route, detail: 'Dispatch authorized and recorded', done: approved },
+    { title: transfer.route, detail: 'Approval / dispatch authorization', done: approved },
     { title: 'Recipient confirms items', detail: 'Each resource can be accepted separately; unresolved items remain open.', done: complete }
   ];
   return <div className="tr-drawer-overlay" onMouseDown={close}>
@@ -203,7 +204,7 @@ export function TransferDetails({ transfer, close, onReceipt,onChanged }: { tran
           <div><small>From</small><strong>{transfer.source}</strong></div>
           <div><small>To</small><strong>{transfer.destination}</strong></div>
           <div><small>Sender</small><strong>{transfer.sender}</strong></div>
-          <div><small>Recipient</small><strong>{transfer.recipient}</strong></div>
+          <div><small>Recipient</small><strong>{transfer.recipient}</strong></div><div><small>Reason</small><strong>{transfer.reason}</strong></div>
         </div></section>
         <section className="tr-details-section"><h3>Transferred resources <span>· {transfer.items.length} item(s)</span></h3><div className="tr-detail-resources">
           {transfer.items.map(item => <div key={item.id} className="tr-detail-resource">
