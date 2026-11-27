@@ -1,3 +1,4 @@
+import { revokeLostLeadAccess } from '../security/organization-policy.js';
 import { Prisma } from '@prisma/client';
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { z } from 'zod';
@@ -191,6 +192,7 @@ router.patch('/organization/branches/:branchId', writePermission, run(async (req
         if (users || assets || departments) throw Error('BRANCH_IN_USE');
       }
       await tx.branch.update({ where: { id: before.id }, data: input.data });
+      if(input.data.kind!==undefined&&input.data.kind!==before.kind){const leads=await tx.department.findMany({where:{branchId:before.id,leadUserId:{not:null}},select:{leadUserId:true}});for(const lead of leads)await revokeLostLeadAccess(tx,lead.leadUserId);}
       await tx.securityAuditEvent.create({ data: {
         action: 'ADMIN_BRANCH_UPDATED', success: true, actorUserId: principal(res).userId,
         details: JSON.stringify({
@@ -256,6 +258,7 @@ router.patch('/organization/departments/:departmentId', writePermission, run(asy
       if (!await validLeader(tx, input.data.leadUserId, branch.id)) throw Error('INVALID_LEAD');
       if (await nameUsed(tx, 'department', input.data.name, branch.id, before.id)) throw Error('DEPARTMENT_EXISTS');
       await tx.department.update({ where: { id: before.id }, data: input.data });
+      await revokeLostLeadAccess(tx,before.leadUserId);
       await tx.securityAuditEvent.create({ data: {
         action: 'ADMIN_DEPARTMENT_UPDATED', success: true, actorUserId: principal(res).userId,
         details: JSON.stringify({

@@ -1,4 +1,4 @@
-import { canBelongToBranch, canLoginAtBranch } from '../security/organization-policy.js';
+import { canBelongToBranch,canLoginUser,leadDepartments,leadAccessInclude,revokeLostLeadAccess } from '../security/organization-policy.js';
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { Prisma, type Role } from '@prisma/client';
 import { z } from 'zod';
@@ -22,8 +22,8 @@ const createSchema = z.object({
 const updateSchema = createSchema.partial().strict();
 const resetSchema = z.object({ reason: z.string().trim().min(10).max(1000) }).strict();
 const userInclude = {
-  role: true, branch: true, department: true,
-  credential: { select: { userId: true } },
+  role: true, branch: true, department: true,ledDepartments:leadAccessInclude,
+  credential: { select: { userId: true,loginDisabled:true } },
   sessions: { select: { lastSeenAt: true }, orderBy: { lastSeenAt: 'desc' as const }, take: 1 }
 } as const;
 
@@ -33,7 +33,7 @@ function apiUser(user: any) {
     role: { id: user.role.id, key: user.role.key, name: user.role.name, protected: user.role.protected },
     branch: { id: user.branch.id, name: user.branch.name },
     department: user.department ? { id: user.department.id, name: user.department.name } : null,
-    active: user.active, pendingActivation: user.role.key !== 'EMPLOYEE' && !user.credential,
+    active: user.active, loginEligible:canLoginUser(user), leadDepartmentIds:leadDepartments(user), pendingActivation:canLoginUser(user)&&(!user.credential||user.credential.loginDisabled),
     phone: user.phone || '',
     lastActive: user.sessions?.[0]?.lastSeenAt ?? null
   };
@@ -218,6 +218,7 @@ router.patch('/users/:userId', asyncRoute(async (req, res) => {
           } });
         }
       }
+      await revokeLostLeadAccess(tx,current.id);
       if (roleId !== current.roleId || branchId !== current.branchId ||
           input.active === false || (input.email && normalizeEmail(input.email) !== current.email)) {
         await tx.session.updateMany({ where: { userId: current.id, revokedAt: null }, data: { revokedAt: new Date() } });
@@ -251,14 +252,16 @@ router.post('/users/:userId/reset-password', asyncRoute(async (req, res) => {
   if (!userId.success || !parsed.success) {
     failure(res, 400, 'INVALID_INPUT', 'Provide an administrative reason of at least 10 characters'); return;
   }
-  const target = await db.user.findUnique({ where: { id: userId.data }, include: { role: true,branch:true } });
+  const target = await db.user.findUnique({ where: { id: userId.data }, include: { role: true,branch:true,ledDepartments:leadAccessInclude,credential:true } });
   if (!target) { failure(res, 404, 'NOT_FOUND', 'User not found'); return; }
-  if (!allowedToManageTarget(actor, target) || !target.active || !canLoginAtBranch(target.role.key,target.branch.kind) ||
+  if (!allowedToManageTarget(actor, target) || !target.active || !canLoginUser(target) ||
       target.id === actor.userId) {
     failure(res, 403, 'FORBIDDEN', 'Cannot reset this account'); return;
   }
   const activationPath = await db.$transaction(async tx => {
-    const link = await issueInvitation(tx, target.id, 'RESET');
+    const current=await tx.user.findUnique({where:{id:target.id},include:{role:true,branch:true,ledDepartments:leadAccessInclude,credential:true}});
+    if(!current||!canLoginUser(current))throw Error('INVALID_STORE_MEMBERSHIP');
+    const link = await issueInvitation(tx, target.id, current.credential?'RESET':'ACTIVATE');
     await tx.userCredential.updateMany({ where: { userId: target.id }, data: { loginDisabled: true } });
     await tx.session.updateMany({ where: { userId: target.id, revokedAt: null }, data: { revokedAt: new Date() } });
     await tx.securityAuditEvent.create({ data: {

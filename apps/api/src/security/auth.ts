@@ -1,4 +1,4 @@
-import { canLoginAtBranch } from './organization-policy.js';
+import { canLoginUser,leadDepartments,leadAccessInclude,effectivePermissions } from './organization-policy.js';
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
 import { db } from '../db.js';
@@ -96,6 +96,7 @@ export type AuthPrincipal = {
   branchName: string;
   department: null | { id: string; name: string };
   permissions: string[];
+  leadDepartmentIds?: string[];
   sessionId: string;
   mustChangePassword: boolean;
 };
@@ -109,7 +110,7 @@ export function publicPrincipal(value: AuthPrincipal) {
     id: value.userId, email: value.email, fullName: value.fullName,
     role: { key: value.roleKey, name: value.roleName, permissions: value.permissions },
     branch: { id: value.branchId, name: value.branchName },
-    department: value.department, mustChangePassword: value.mustChangePassword
+    department: value.department, leadDepartmentIds:value.leadDepartmentIds??[], mustChangePassword: value.mustChangePassword
   };
 }
 export const requireAuth: RequestHandler = async (req, res, next: NextFunction) => {
@@ -122,7 +123,7 @@ export const requireAuth: RequestHandler = async (req, res, next: NextFunction) 
     const session = await db.session.findUnique({
       where: { tokenHash: hashSessionToken(token) },
       include: { user: { include: {
-        branch: true, department: true, credential: true,
+        branch: true, department: true, credential: true, ledDepartments:leadAccessInclude,
         role: { include: { grants: { include: { permission: true } } } }
       } } }
     });
@@ -130,7 +131,7 @@ export const requireAuth: RequestHandler = async (req, res, next: NextFunction) 
     if (!session || session.revokedAt || session.expiresAt <= now ||
         session.lastSeenAt.getTime() + idleMs <= now.getTime() ||
         !session.user.active || !session.user.branch.active || !session.user.role.active ||
-        !canLoginAtBranch(session.user.role.key,session.user.branch.kind) || session.user.credential?.loginDisabled) {
+        !canLoginUser(session.user) || session.user.credential?.loginDisabled) {
       clearSessionCookie(res);
       res.status(401).json({ error: { code: 'SESSION_EXPIRED', message: 'Session expired or revoked' } });
       return;
@@ -142,7 +143,8 @@ export const requireAuth: RequestHandler = async (req, res, next: NextFunction) 
       roleKey: session.user.role.key, roleName: session.user.role.name,
       branchId: session.user.branchId, branchName: session.user.branch.name,
       department: session.user.department ? { id: session.user.department.id, name: session.user.department.name } : null,
-      permissions: session.user.role.grants.map(g => g.permission.key),
+      leadDepartmentIds:leadDepartments(session.user),
+      permissions: effectivePermissions(session.user,session.user.role.grants.map(g => g.permission.key)),
       mustChangePassword: !!session.user.credential?.mustChangePassword,
       sessionId: session.id
     } satisfies AuthPrincipal;

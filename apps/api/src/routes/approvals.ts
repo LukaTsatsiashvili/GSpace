@@ -73,7 +73,7 @@ const excludedReviewRoles = ['BRANCH_MANAGER', 'EMPLOYEE'];
 const canReview = (actor: Actor) =>
   !excludedReviewRoles.includes(actor.roleKey) && actor.permissions.includes('approvals.review');
 const canRequest = (actor: Actor) =>
-  actor.roleKey !== 'EMPLOYEE' && actor.permissions.includes('approvals.request');
+  (actor.roleKey !== 'EMPLOYEE'||!!actor.leadDepartmentIds?.length) && actor.permissions.includes('approvals.request');
 const canUse = (actor: Actor) =>
   ['approvals.request', 'approvals.review', 'approvals.configure', 'audit.view'].some(p => actor.permissions.includes(p));
 const scoped = (actor: Actor, branchId: string) => canAccessBranch(actor.roleKey, actor.branchId, branchId);
@@ -157,10 +157,10 @@ async function reviewerIds(tx: Prisma.TransactionClient, steps: Step[], requeste
   });
 }
 async function validateBeneficiary(tx: Prisma.TransactionClient, id: string | null,
-  branchId: string, required: boolean) {
+  branchId: string, required: boolean, actor:Actor) {
   if (!id) { if (required) throw Error('BENEFICIARY_REQUIRED'); return; }
   const employee = await tx.user.findUnique({ where: { id }, include: { role: true } });
-  if (!employee?.active || employee.role.key !== 'EMPLOYEE' || employee.branchId !== branchId)
+  if (!employee?.active || employee.role.key !== 'EMPLOYEE' || employee.branchId !== branchId || (actor.roleKey==='EMPLOYEE' && !actor.leadDepartmentIds?.includes(employee.departmentId??'')))
     throw Error('INVALID_BENEFICIARY');
 }
 const include = {
@@ -236,7 +236,7 @@ router.get('/lookups', run(async (_req, res) => {
     db.role.findMany({ where: { active: true, key: { notIn: excludedReviewRoles },
       grants: { some: { permission: { key: 'approvals.review' } } } }, select: { id: true, name: true }, orderBy: { name: 'asc' } }),
     db.user.findMany({ where: { active: true, role: { key: 'EMPLOYEE' },
-      ...(central(actor) ? {} : { branchId: actor.branchId }) },
+      ...(central(actor) ? {} : { branchId: actor.branchId }),...(actor.roleKey==='EMPLOYEE'?{departmentId:{in:actor.leadDepartmentIds??[]}}:{}) },
       select: { id: true, fullName: true, branchId: true }, orderBy: { fullName: 'asc' } })
   ]);
   res.json({ branches, users, roles, employees, canConfigure: canConfigure(actor), canExport: actor.permissions.includes('reports.export') });
@@ -325,7 +325,7 @@ router.post('/', run(async (req, res) => {
       const version = type.versions[0];
       const steps = configSteps(version.steps);
       validateValues(configFields(version.fields), data.values);
-      await validateBeneficiary(tx, data.beneficiaryId, data.branchId, version.beneficiaryRequired);
+      await validateBeneficiary(tx, data.beneficiaryId, data.branchId, version.beneficiaryRequired,actor);
       const ids = await reviewerIds(tx, steps, actor.userId);
       const counter = await tx.approvalCounter.upsert({
         where: { name: 'request' }, create: { name: 'request', nextNumber: 2 },
@@ -408,7 +408,7 @@ router.post('/:id/resubmit', run(async (req, res) => {
       if (row.status !== 'CHANGES_REQUESTED') throw Error('INVALID_STATE');
       validateValues(configFields(row.version.fields), data.values);
       const beneficiaryId = data.beneficiaryId === undefined ? row.beneficiaryId : data.beneficiaryId;
-      await validateBeneficiary(tx, beneficiaryId, row.branchId, row.version.beneficiaryRequired);
+      await validateBeneficiary(tx, beneficiaryId, row.branchId, row.version.beneficiaryRequired,actor);
       const updated = await tx.approvalRequest.updateMany({
         where: { id, status: 'CHANGES_REQUESTED' },
         data: { status: 'PENDING', currentStep: 0, beneficiaryId,
