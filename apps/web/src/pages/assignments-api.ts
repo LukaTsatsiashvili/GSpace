@@ -53,8 +53,8 @@ export const assignmentsApi = {
   lookups: () => request<Lookups>('/lookups'),
   issue: (data: { recipientId: string; resourceIds: string[]; dueAt: string | null; notes: string }) =>
     request<{ id: string; code: string }>('/', data),
-  receipt: (id: string, decisions: Receipt[]) =>
-    request<{ ok: boolean }>('/' + encodeURIComponent(id) + '/receipt', { decisions }),
+  receipt: (id: string, decisions: Receipt[], onBehalfOf = false) =>
+    request<{ ok: boolean }>('/' + encodeURIComponent(id) + '/receipt', { decisions, onBehalfOf }),
   requestReturn: (id: string, itemIds: string[]) =>
     request<{ ok: boolean }>('/' + encodeURIComponent(id) + '/returns/request', { itemIds }),
   verifyReturn: (id: string, items: { itemId: string; condition: string }[]) =>
