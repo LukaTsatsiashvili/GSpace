@@ -36,6 +36,7 @@ const configuration = z.object({
   description: z.string().trim().max(1000).default(''),
   active: z.boolean().default(true),
   deadlineDays: z.number().int().min(1).max(90).default(3),
+  beneficiaryRequired: z.boolean().default(false),
   fields: z.array(field).max(20),
   steps: z.array(step).min(1).max(10)
 }).strict().superRefine((data, ctx) => {
@@ -49,12 +50,14 @@ const dynamicValues = z.record(z.union([z.string().max(2000), z.array(z.string()
 const submit = z.object({
   typeId: uuid,
   branchId: uuid,
+  beneficiaryId: uuid.nullable().default(null),
   title: z.string().trim().min(3).max(180),
   reason: z.string().trim().min(3).max(3000),
   amount: z.number().finite().min(0).max(999999999).nullable().default(null),
   values: dynamicValues.default({})
 }).strict();
-const resubmit = z.object({ reason: z.string().trim().min(3).max(3000), values: dynamicValues }).strict();
+const resubmit = z.object({ reason: z.string().trim().min(3).max(3000), values: dynamicValues,
+  beneficiaryId: uuid.nullable().optional() }).strict();
 const decide = z.object({
   decision: z.enum(['APPROVED', 'REJECTED', 'CHANGES_REQUESTED']),
   comment: z.string().trim().max(2000).default('')
@@ -66,13 +69,24 @@ type Step = z.infer<typeof step>;
 type Actor = AuthPrincipal;
 const central = (actor: Actor) => ['SYSTEM_ADMIN', 'COMPANY_ADMIN'].includes(actor.roleKey);
 const canConfigure = (actor: Actor) => central(actor) && actor.permissions.includes('approvals.configure');
+const excludedReviewRoles = ['BRANCH_MANAGER', 'EMPLOYEE'];
+const canReview = (actor: Actor) =>
+  !excludedReviewRoles.includes(actor.roleKey) && actor.permissions.includes('approvals.review');
+const canRequest = (actor: Actor) =>
+  actor.roleKey !== 'EMPLOYEE' && actor.permissions.includes('approvals.request');
 const canUse = (actor: Actor) =>
   ['approvals.request', 'approvals.review', 'approvals.configure', 'audit.view'].some(p => actor.permissions.includes(p));
 const scoped = (actor: Actor, branchId: string) => canAccessBranch(actor.roleKey, actor.branchId, branchId);
 function error(res: Response, e: unknown) {
+  if (e instanceof Error && /^INVALID_APPROVERS_STEP_\d+$/.test(e.message)) {
+    fail(res, 400, 'INVALID_APPROVERS', 'No eligible back-office reviewer for approval level ' +
+      e.message.split('_').pop() + '. Choose an active reviewer with approval permission, outside the requesting manager role.');
+    return true;
+  }
   if (e instanceof Error && [
     'WORKFLOW_INVALID', 'INVALID_FIELDS', 'INVALID_APPROVERS', 'BRANCH_INACTIVE',
-    'TYPE_INACTIVE', 'INVALID_ROLE', 'INVALID_STATE', 'REVIEW_NOT_ASSIGNED'
+    'TYPE_INACTIVE', 'INVALID_ROLE', 'INVALID_STATE', 'REVIEW_NOT_ASSIGNED',
+    'INVALID_BENEFICIARY', 'BENEFICIARY_REQUIRED'
   ].includes(e.message)) {
     const status = ['INVALID_STATE'].includes(e.message) ? 409 :
       e.message === 'REVIEW_NOT_ASSIGNED' ? 403 : 400;
@@ -120,28 +134,41 @@ function validateValues(fields: Field[], values: Record<string, string | string[
 async function validateTargets(tx: Prisma.TransactionClient, steps: Step[]) {
   const userIds = [...new Set(steps.flatMap(s => s.targets.filter(t => t.kind === 'USER').map(t => t.id)))];
   const roleIds = [...new Set(steps.flatMap(s => s.targets.filter(t => t.kind === 'ROLE').map(t => t.id)))];
-  if (userIds.length && await tx.user.count({ where: { id: { in: userIds }, active: true } }) !== userIds.length)
+  if (userIds.length && await tx.user.count({ where: { id: { in: userIds }, active: true,
+    role: { active: true, key: { notIn: excludedReviewRoles }, grants: { some: { permission: { key: 'approvals.review' } } } } } }) !== userIds.length)
     throw Error('INVALID_APPROVERS');
-  if (roleIds.length && await tx.role.count({ where: { id: { in: roleIds }, active: true } }) !== roleIds.length)
+  if (roleIds.length && await tx.role.count({ where: { id: { in: roleIds }, active: true,
+    key: { notIn: excludedReviewRoles }, grants: { some: { permission: { key: 'approvals.review' } } } } }) !== roleIds.length)
     throw Error('INVALID_ROLE');
 }
-async function reviewerIds(tx: Prisma.TransactionClient, steps: Step[], branchId: string, requesterId: string) {
+async function reviewerIds(tx: Prisma.TransactionClient, steps: Step[], requesterId: string) {
+  // Back-office approvers are independent of the requesting store's branch.
   const reviewers = await tx.user.findMany({
-    where: { branchId, active: true, branch: { active: true }, role: { active: true, grants: { some: { permission: { key: 'approvals.review' } } } } },
+    where: { active: true, branch: { active: true }, role: { active: true,
+      key: { notIn: excludedReviewRoles },
+      grants: { some: { permission: { key: 'approvals.review' } } } } },
     select: { id: true, roleId: true }
   });
-  return steps.map(s => {
-    const ids = [...new Set(reviewers.filter(u => u.id !== requesterId && s.targets.some(t =>
-      t.kind === 'USER' ? t.id === u.id : t.id === u.roleId)).map(u => u.id))];
-    if (ids.length === 0 || ids.length > 50) throw Error('INVALID_APPROVERS');
+  return steps.map((step, index) => {
+    const ids = [...new Set(reviewers.filter(user => user.id !== requesterId && step.targets.some(target =>
+      target.kind === 'USER' ? target.id === user.id : target.id === user.roleId)).map(user => user.id))];
+    if (ids.length === 0 || ids.length > 50) throw Error('INVALID_APPROVERS_STEP_' + (index + 1));
     return ids;
   });
+}
+async function validateBeneficiary(tx: Prisma.TransactionClient, id: string | null,
+  branchId: string, required: boolean) {
+  if (!id) { if (required) throw Error('BENEFICIARY_REQUIRED'); return; }
+  const employee = await tx.user.findUnique({ where: { id }, include: { role: true } });
+  if (!employee?.active || employee.role.key !== 'EMPLOYEE' || employee.branchId !== branchId)
+    throw Error('INVALID_BENEFICIARY');
 }
 const include = {
   type: { select: { id: true, name: true, code: true } },
   version: { select: { version: true, fields: true, steps: true, deadlineDays: true } },
   branch: { select: { id: true, name: true } },
   requester: { select: { id: true, fullName: true } },
+  beneficiary: { select: { id: true, fullName: true } },
   reviews: { include: { reviewer: { select: { id: true, fullName: true } } }, orderBy: [{ step: 'asc' }, { reviewer: { fullName: 'asc' } }] },
   events: { orderBy: { createdAt: 'desc' }, take: 200 }
 } satisfies Prisma.ApprovalRequestInclude;
@@ -158,10 +185,12 @@ function toJson(row: ApprovalRow, actor: Actor) {
     totalSteps: steps.length, steps, values: row.values, fields: row.version.fields,
     typeId: row.typeId, type: row.type.name, typeCode: row.type.code,
     version: row.version.version, requesterId: row.requesterId, requester: row.requester.fullName,
+    beneficiaryId: row.beneficiaryId, beneficiary: row.beneficiary?.fullName ?? null,
+    beneficiaryRequired: row.version.beneficiaryRequired,
     branchId: row.branchId, branch: row.branch.name, dueAt: row.dueAt, createdAt: row.createdAt,
     completedAt: row.completedAt, canCancel: row.requesterId === actor.userId && ['PENDING','CHANGES_REQUESTED'].includes(row.status),
     canResubmit: row.requesterId === actor.userId && row.status === 'CHANGES_REQUESTED',
-    canReview: actor.permissions.includes('approvals.review') && row.status === 'PENDING' &&
+    canReview: canReview(actor) && row.status === 'PENDING' &&
       row.requesterId !== actor.userId && row.reviews.some(r => r.reviewerId === actor.userId &&
         r.step === row.currentStep && r.status === 'PENDING'),
     reviews: row.reviews.map(r => ({ id: r.id, step: r.step, reviewerId: r.reviewerId,
@@ -198,13 +227,19 @@ router.use(requireAuth);
 router.get('/lookups', run(async (_req, res) => {
   const actor = principal(res);
   if (!canUse(actor)) { fail(res, 403, 'FORBIDDEN', 'Approvals access required'); return; }
-  const [branches, users, roles] = await Promise.all([
+  const [branches, users, roles, employees] = await Promise.all([
     db.branch.findMany({ where: { active: true, ...(central(actor) ? {} : { id: actor.branchId }) }, select: { id: true, name: true }, orderBy: { name: 'asc' } }),
-    db.user.findMany({ where: { active: true, branchId: actor.branchId, role: { active: true, grants: { some: { permission: { key: 'approvals.review' } } } } },
+    db.user.findMany({ where: { active: true, branch: { active: true },
+      role: { active: true, key: { notIn: excludedReviewRoles },
+        grants: { some: { permission: { key: 'approvals.review' } } } } },
       select: { id: true, fullName: true }, orderBy: { fullName: 'asc' } }),
-    db.role.findMany({ where: { active: true, grants: { some: { permission: { key: 'approvals.review' } } } }, select: { id: true, name: true }, orderBy: { name: 'asc' } })
+    db.role.findMany({ where: { active: true, key: { notIn: excludedReviewRoles },
+      grants: { some: { permission: { key: 'approvals.review' } } } }, select: { id: true, name: true }, orderBy: { name: 'asc' } }),
+    db.user.findMany({ where: { active: true, role: { key: 'EMPLOYEE' },
+      ...(central(actor) ? {} : { branchId: actor.branchId }) },
+      select: { id: true, fullName: true, branchId: true }, orderBy: { fullName: 'asc' } })
   ]);
-  res.json({ branches, users, roles, canConfigure: canConfigure(actor), canExport: actor.permissions.includes('reports.export') });
+  res.json({ branches, users, roles, employees, canConfigure: canConfigure(actor), canExport: actor.permissions.includes('reports.export') });
 }));
 router.get('/types', run(async (_req, res) => {
   const actor = principal(res);
@@ -217,6 +252,7 @@ router.get('/types', run(async (_req, res) => {
   res.json({ types: types.map(t => ({ id: t.id, code: t.code, name: t.name,
     description: t.description, active: t.active, version: t.currentVersion,
     fields: t.versions[0]?.fields ?? [], steps: t.versions[0]?.steps ?? [],
+    beneficiaryRequired: t.versions[0]?.beneficiaryRequired ?? false,
     deadlineDays: t.versions[0]?.deadlineDays ?? 3 })) });
 }));
 router.post('/types', run(async (req, res) => {
@@ -229,7 +265,8 @@ router.post('/types', run(async (req, res) => {
       const item = await tx.approvalType.create({ data: {
         code: data.code, name: data.name, description: data.description, active: data.active,
         versions: { create: { version: 1, fields: data.fields as Prisma.InputJsonValue,
-          steps: data.steps as Prisma.InputJsonValue, deadlineDays: data.deadlineDays } }
+          steps: data.steps as Prisma.InputJsonValue, deadlineDays: data.deadlineDays,
+          beneficiaryRequired: data.beneficiaryRequired } }
       } });
       await audit(tx, actor, 'TYPE_CREATED', null, '', { typeId: item.id, code: item.code, version: 1 });
       return item;
@@ -254,7 +291,7 @@ router.put('/types/:id', run(async (req, res) => {
       if (!changed.count) throw Error('INVALID_STATE');
       await tx.approvalTypeVersion.create({ data: {
         typeId, version, fields: data.fields as Prisma.InputJsonValue, steps: data.steps as Prisma.InputJsonValue,
-        deadlineDays: data.deadlineDays
+        deadlineDays: data.deadlineDays, beneficiaryRequired: data.beneficiaryRequired
       } });
       await audit(tx, actor, 'TYPE_VERSION_CREATED', null, '', { typeId, version });
     });
@@ -273,7 +310,7 @@ router.get('/', run(async (_req, res) => {
 }));
 router.post('/', run(async (req, res) => {
   const actor = principal(res);
-  if (!actor.permissions.includes('approvals.request')) { fail(res, 403, 'FORBIDDEN', 'Request permission required'); return; }
+  if (!canRequest(actor)) { fail(res, 403, 'FORBIDDEN', 'Branch requester permission required'); return; }
   const data = submit.parse(req.body);
   if (!scoped(actor, data.branchId)) { fail(res, 403, 'FORBIDDEN', 'Branch not accessible'); return; }
   try {
@@ -288,7 +325,8 @@ router.post('/', run(async (req, res) => {
       const version = type.versions[0];
       const steps = configSteps(version.steps);
       validateValues(configFields(version.fields), data.values);
-      const ids = await reviewerIds(tx, steps, data.branchId, actor.userId);
+      await validateBeneficiary(tx, data.beneficiaryId, data.branchId, version.beneficiaryRequired);
+      const ids = await reviewerIds(tx, steps, actor.userId);
       const counter = await tx.approvalCounter.upsert({
         where: { name: 'request' }, create: { name: 'request', nextNumber: 2 },
         update: { nextNumber: { increment: 1 } }
@@ -296,13 +334,15 @@ router.post('/', run(async (req, res) => {
       const code = 'REQ-' + String(counter.nextNumber - 1).padStart(5, '0');
       const created = await tx.approvalRequest.create({ data: {
         code, typeId: type.id, versionId: version.id, requesterId: actor.userId,
+        beneficiaryId: data.beneficiaryId,
         branchId: data.branchId, title: data.title, reason: data.reason,
         amount: data.amount === null ? null : new Prisma.Decimal(data.amount.toFixed(2)),
         values: data.values as Prisma.InputJsonValue,
         dueAt: new Date(Date.now() + version.deadlineDays * 86_400_000),
         reviews: { create: ids.flatMap((userIds, index) => userIds.map(reviewerId => ({ step: index, reviewerId }))) }
       } });
-      await audit(tx, actor, 'SUBMITTED', created.id, '', { typeId: type.id, version: version.version });
+      await audit(tx, actor, 'SUBMITTED', created.id, '',
+        { typeId: type.id, version: version.version, beneficiaryId: data.beneficiaryId, branchId: data.branchId });
       return code;
     });
     res.status(201).json({ code });
@@ -317,7 +357,7 @@ router.get('/:id', run(async (req, res) => {
 }));
 router.post('/:id/decision', run(async (req, res) => {
   const actor = principal(res);
-  if (!actor.permissions.includes('approvals.review')) { fail(res, 403, 'FORBIDDEN', 'Approver permission required'); return; }
+  if (!canReview(actor)) { fail(res, 403, 'FORBIDDEN', 'Only authorized back-office reviewers can decide requests'); return; }
   const id = uuid.parse(req.params.id);
   const data = decide.parse(req.body);
   try {
@@ -367,16 +407,19 @@ router.post('/:id/resubmit', run(async (req, res) => {
       if (!row || row.requesterId !== actor.userId) throw Error('REVIEW_NOT_ASSIGNED');
       if (row.status !== 'CHANGES_REQUESTED') throw Error('INVALID_STATE');
       validateValues(configFields(row.version.fields), data.values);
+      const beneficiaryId = data.beneficiaryId === undefined ? row.beneficiaryId : data.beneficiaryId;
+      await validateBeneficiary(tx, beneficiaryId, row.branchId, row.version.beneficiaryRequired);
       const updated = await tx.approvalRequest.updateMany({
         where: { id, status: 'CHANGES_REQUESTED' },
-        data: { status: 'PENDING', currentStep: 0, values: data.values as Prisma.InputJsonValue,
+        data: { status: 'PENDING', currentStep: 0, beneficiaryId,
+          values: data.values as Prisma.InputJsonValue,
           reason: data.reason, completedAt: null, dueAt: new Date(Date.now() + row.version.deadlineDays * 86_400_000) }
       });
       if (!updated.count) throw Error('INVALID_STATE');
       await tx.approvalReview.updateMany({ where: { requestId: id }, data: {
         status: 'PENDING', decidedAt: null, comment: ''
       } });
-      await audit(tx, actor, 'RESUBMITTED', id, '', { retainedVersion: row.version.version });
+      await audit(tx, actor, 'RESUBMITTED', id, '', { retainedVersion: row.version.version, beneficiaryId });
     });
     res.json({ ok: true });
   } catch (e) { if (!error(res, e)) throw e; }
@@ -406,9 +449,9 @@ router.post('/export/csv', run(async (req, res) => {
   const rows = await db.approvalRequest.findMany({ where: { id: { in: ids }, AND: [requestScope(actor)] },
     include, orderBy: { createdAt: 'desc' } });
   if (rows.length !== ids.length) { fail(res, 403, 'FORBIDDEN', 'One or more requests are not accessible'); return; }
-  const header = ['Request ID','Title','Type','Version','Requester','Branch','Status','Step','Created UTC','Due UTC'];
+  const header = ['Request ID','Title','Type','Version','Requester','Requested for','Branch','Status','Step','Created UTC','Due UTC'];
   const output = [header.map(csv).join(','),
-    ...rows.map(r => [r.code,r.title,r.type.name,r.version.version,r.requester.fullName,r.branch.name,
+    ...rows.map(r => [r.code,r.title,r.type.name,r.version.version,r.requester.fullName,r.beneficiary?.fullName ?? '',r.branch.name,
       r.status,r.currentStep+1,r.createdAt.toISOString(),r.dueAt?.toISOString() ?? ''].map(csv).join(','))].join('\r\n');
   await db.securityAuditEvent.create({ data: { action: 'APPROVAL_REQUESTS_EXPORTED', success: true,
     actorUserId: actor.userId, details: JSON.stringify({ count: ids.length }) } });
