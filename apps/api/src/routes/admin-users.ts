@@ -1,4 +1,4 @@
-import { canLoginAtBranch } from '../security/organization-policy.js';
+import { canBelongToBranch, canLoginAtBranch } from '../security/organization-policy.js';
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { Prisma, type Role } from '@prisma/client';
 import { z } from 'zod';
@@ -54,11 +54,11 @@ async function assignableRole(roleId: string, actor: AuthPrincipal): Promise<Rol
   if (target.protected) return null;
   return target.grants.every(item => actor.permissions.includes(item.permission.key)) ? target : null;
 }
-async function validOrganization(branchId: string, departmentId: string | null, roleKey:string) {
-  const branch = await db.branch.findUnique({ where: { id: branchId } });
-  if (!branch?.active || (roleKey!=='EMPLOYEE' && !canLoginAtBranch(roleKey,branch.kind))) return false;
+async function validOrganization(branchId: string, departmentId: string | null, roleKey:string,client:Prisma.TransactionClient=db) {
+  const branch = await client.branch.findUnique({ where: { id: branchId } });
+  if (!branch?.active || !canBelongToBranch(roleKey,branch.kind)) return false;
   if (!departmentId) return true;
-  const department = await db.department.findUnique({ where: { id: departmentId } });
+  const department = await client.department.findUnique({ where: { id: departmentId } });
   return !!department?.active && department.branchId === branchId;
 }
 function allowedToManageTarget(actor: AuthPrincipal, target: { id: string; role: { protected: boolean }; branchId: string }) {
@@ -66,6 +66,7 @@ function allowedToManageTarget(actor: AuthPrincipal, target: { id: string; role:
   return globalScope(actor) || target.branchId === actor.branchId;
 }
 function databaseError(err: unknown, res: Response) {
+  if(err instanceof Error&&err.message==='INVALID_STORE_MEMBERSHIP'){failure(res,409,'INVALID_MEMBERSHIP','Store membership allows only Branch Manager and Employee. Reload and retry.');return true;}
   if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
     failure(res, 409, 'CONFLICT', 'A user with this email already exists');
     return true;
@@ -134,6 +135,7 @@ router.post('/users', asyncRoute(async (req, res) => {
   }
   try {
     const { user, activationPath } = await db.$transaction(async tx => {
+      if(!await validOrganization(input.branchId,input.departmentId,targetRole.key,tx))throw Error('INVALID_STORE_MEMBERSHIP');
       const created = await tx.user.create({
         data: {
           fullName: input.name, email: normalizeEmail(input.email), active: input.active,
@@ -147,7 +149,7 @@ router.post('/users', asyncRoute(async (req, res) => {
         details: JSON.stringify({ roleId: input.roleId, branchId: input.branchId, active: input.active })
       } });
       return { user: created, activationPath: link };
-    });
+    },{isolationLevel:Prisma.TransactionIsolationLevel.Serializable});
     res.status(201).json({ userId: user.id, activationPath });
   } catch (error) { if (!databaseError(error, res)) throw error; }
 }));
@@ -182,6 +184,7 @@ router.patch('/users/:userId', asyncRoute(async (req, res) => {
     await db.$transaction(async tx => {
       // Read again inside the transaction. Concurrent protected-admin changes fail serializably.
       const current = await tx.user.findUniqueOrThrow({ where: { id: userId.data }, include: { role: true } });
+      if(!await validOrganization(branchId,departmentId,nextRole.key,tx))throw Error('INVALID_STORE_MEMBERSHIP');
       if (current.role.protected && (!input.active && input.active !== undefined || roleId !== current.roleId)) {
         const remaining = await tx.user.count({
           where: { active: true, role: { key: 'SYSTEM_ADMIN' }, id: { not: current.id } }
@@ -248,9 +251,9 @@ router.post('/users/:userId/reset-password', asyncRoute(async (req, res) => {
   if (!userId.success || !parsed.success) {
     failure(res, 400, 'INVALID_INPUT', 'Provide an administrative reason of at least 10 characters'); return;
   }
-  const target = await db.user.findUnique({ where: { id: userId.data }, include: { role: true } });
+  const target = await db.user.findUnique({ where: { id: userId.data }, include: { role: true,branch:true } });
   if (!target) { failure(res, 404, 'NOT_FOUND', 'User not found'); return; }
-  if (!allowedToManageTarget(actor, target) || !target.active || target.role.key === 'EMPLOYEE' ||
+  if (!allowedToManageTarget(actor, target) || !target.active || !canLoginAtBranch(target.role.key,target.branch.kind) ||
       target.id === actor.userId) {
     failure(res, 403, 'FORBIDDEN', 'Cannot reset this account'); return;
   }

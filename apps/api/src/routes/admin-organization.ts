@@ -71,6 +71,7 @@ function knownError(res: Response, err: unknown, mapping: Record<string, [number
   const message = err instanceof Error ? err.message : '';
   const found = mapping[message];
   if (found) { fail(res, found[0], message, found[1]); return true; }
+  if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2034') {fail(res,409,'CONCURRENT_UPDATE','Reload and retry the change');return true;}
   if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
     fail(res, 409, 'ALREADY_EXISTS', conflict); return true;
   }
@@ -113,7 +114,7 @@ async function validateClassification(tx:Prisma.TransactionClient, data:{kind?:s
   if(data.businessUnitId&&!await tx.businessUnit.findFirst({where:{id:data.businessUnitId,active:true}}))throw Error('INVALID_CLASSIFICATION');
   if(data.brandId&&!await tx.brand.findFirst({where:{id:data.brandId,active:true}}))throw Error('INVALID_CLASSIFICATION');
   if(data.kind==='STORE' && branchId){
-    if(await tx.user.count({where:{branchId,active:true,role:{key:{notIn:['BRANCH_MANAGER','EMPLOYEE']}}}}))throw Error('STORE_ROLE_CONFLICT');
+    if(await tx.user.count({where:{branchId,role:{key:{notIn:['BRANCH_MANAGER','EMPLOYEE']}}}}))throw Error('STORE_ROLE_CONFLICT');
     if(data.managerId&&!await tx.user.findFirst({where:{id:data.managerId,branchId,active:true,role:{key:'BRANCH_MANAGER'}}}))throw Error('INVALID_MANAGER');
   }
 }
@@ -157,12 +158,12 @@ router.post('/organization/branches', writePermission, run(async (req, res) => {
         details: JSON.stringify({ id: created.id, code: created.code, after: input.data })
       } });
       return created;
-    });
+    },{isolationLevel:Prisma.TransactionIsolationLevel.Serializable});
     res.status(201).json({ id: branch.id });
   } catch (err) {
     if (knownError(res, err, {
       INVALID_CLASSIFICATION:[400,'Select a business unit and a brand for stores'],
-      STORE_ROLE_CONFLICT:[409,'Move or change active non-manager login roles before classifying as a store'],
+      STORE_ROLE_CONFLICT:[409,'Move or change incompatible user roles before classifying as a store'],
       BRANCH_EXISTS: [409, 'A branch with this name already exists'],
       MANAGER_BRANCH_MISMATCH: [400, 'Create a branch first, then assign a manager from that branch']
     }, 'Branch code already exists')) return;
@@ -198,7 +199,7 @@ router.patch('/organization/branches/:branchId', writePermission, run(async (req
           after: input.data
         })
       } });
-    });
+    },{isolationLevel:Prisma.TransactionIsolationLevel.Serializable});
     res.json({ ok: true });
   } catch (err) {
     if (knownError(res, err, {
