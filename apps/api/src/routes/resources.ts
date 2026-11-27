@@ -62,9 +62,9 @@ function usesFinance(data: ResourceInput) {
   return data.purchasePrice !== null || data.purchaseDate !== null || data.supplier !== '' ||
     data.usefulLifeMonths !== null || data.residualValue !== null;
 }
-function auditResource(row: { id: string; assetCode: string; name: string; category: string; branchId: string; condition: string; status: string; location: string }) {
+function auditResource(row: { id: string; assetCode: string; name: string; category: string; branchId: string; departmentId?:string|null; condition: string; status: string; location: string }) {
   return { id: row.id, assetCode: row.assetCode, name: row.name, category: row.category,
-    branchId: row.branchId, condition: row.condition, status: row.status, location: row.location };
+    branchId: row.branchId,departmentId:row.departmentId??null, condition: row.condition, status: row.status, location: row.location };
 }
 const include = {
   branch: { select: { id: true, name: true } },department:{select:{id:true,name:true}},
@@ -234,7 +234,7 @@ router.get('/catalog', run(async (_req, res) => {
 
 router.get('/', run(async (req, res) => {
   const actor = principal(res);
-  const scope = isCentral(actor) ? {} : { branchId: actor.branchId,...resourceDepartmentScope(actor) };
+  const scope:Prisma.ResourceWhereInput = isCentral(actor) ? {} : { branchId: actor.branchId,...resourceDepartmentScope(actor) };
   const rows = await db.resource.findMany({
     where: scope, include, orderBy: { createdAt: 'desc' }, take: 500
   });
@@ -287,16 +287,17 @@ router.get('/:resourceId/audit', run(async (req, res) => {
   if (!found || !canAccessBranch(actor.roleKey, actor.branchId, found.branchId)) {
     fail(res, 404, 'NOT_FOUND', 'Resource not found'); return;
   }
-  if(departmentManager(actor)){res.json({events:[]});return;} // historical events may contain another department's details
   const events = await db.resourceAuditEvent.findMany({
     where: { resourceId: req.params.resourceId }, orderBy: { createdAt: 'desc' }, take: 100
   });
-  res.json({ events });
+  const owned=new Set(actor.leadDepartmentIds??[]);
+  const safe=(v:Prisma.JsonValue)=>v!==null&&typeof v==='object'&&!Array.isArray(v)&&typeof v.departmentId==='string'&&owned.has(v.departmentId);
+  res.json({ events:departmentManager(actor)?events.filter(e=>safe(e.before)&&safe(e.after)):events });
 }));
 
 router.get('/:resourceId/documents/:documentId', run(async (req, res) => {
   const actor = principal(res);
-  const resource = await db.resource.findUnique({
+  const resource = await db.resource.findFirst({
     where: { id: req.params.resourceId,...resourceDepartmentScope(actor) }, select: { branchId: true }
   });
   if (!resource || !canAccessBranch(actor.roleKey, actor.branchId, resource.branchId)) {
@@ -427,7 +428,7 @@ router.delete('/:resourceId/documents/:documentId', allowEdit, run(async (req, r
 
 router.get('/:resourceId/assignments', run(async (req, res) => {
   const actor = principal(res);
-  const resource = await db.resource.findUnique({
+  const resource = await db.resource.findFirst({
     where: { id: req.params.resourceId,...resourceDepartmentScope(actor) }, select: { id: true, branchId: true }
   });
   if (!resource || !canAccessBranch(actor.roleKey, actor.branchId, resource.branchId)) {
@@ -494,7 +495,7 @@ router.patch('/:resourceId', allowEdit, run(async (req, res) => {
       const edits = createData({ ...parsed.data, documents: [] });
       const data = actor.permissions.includes('finance.edit') ? edits : {
         name: edits.name, category: edits.category, resourceType: edits.resourceType,
-        condition: edits.condition, status: edits.status, branchId: edits.branchId,
+        condition: edits.condition, status: edits.status, branchId: edits.branchId,departmentId:edits.departmentId,
         location: edits.location, serialNumber: edits.serialNumber,
         description: edits.description, warrantyEnd: edits.warrantyEnd,
         customFields: edits.customFields

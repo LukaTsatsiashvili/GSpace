@@ -32,7 +32,7 @@ const branchInclude = {
 const departmentInclude = {
   branch: { select: { id: true, name: true } },
   lead: { select: { id: true, fullName: true } },
-  _count: { select: { users: true } }
+  _count: { select: { users: true,resources:true,outgoingTransfers:true,incomingTransfers:true } }
 } satisfies Prisma.DepartmentInclude;
 const serializeBranch = (row: Prisma.BranchGetPayload<{ include: typeof branchInclude }>) => ({
   id: row.id, code: row.code, name: row.name, city: row.city, active: row.active, kind:row.kind,businessUnitId:row.businessUnitId,brandId:row.brandId,businessUnit:row.businessUnit?.name??null,brand:row.brand?.name??null,
@@ -254,7 +254,7 @@ router.patch('/organization/departments/:departmentId', writePermission, run(asy
       if (!before) throw Error('DEPARTMENT_NOT_FOUND');
       const branch = await tx.branch.findUnique({ where: { id: input.data.branchId } });
       if (!branch || input.data.active && !branch.active) throw Error('BRANCH_UNAVAILABLE');
-      if (before.branchId !== branch.id && before._count.users) throw Error('DEPARTMENT_IN_USE');
+      if (before.branchId !== branch.id && (before._count.users||before._count.resources||before._count.outgoingTransfers||before._count.incomingTransfers)) throw Error('DEPARTMENT_IN_USE');
       if (!await validLeader(tx, input.data.leadUserId, branch.id)) throw Error('INVALID_LEAD');
       if (await nameUsed(tx, 'department', input.data.name, branch.id, before.id)) throw Error('DEPARTMENT_EXISTS');
       await tx.department.update({ where: { id: before.id }, data: input.data });
@@ -273,7 +273,7 @@ router.patch('/organization/departments/:departmentId', writePermission, run(asy
     if (knownError(res, err, {
       DEPARTMENT_NOT_FOUND: [404, 'Department not found'],
       BRANCH_UNAVAILABLE: [400, 'Active departments require an active branch'],
-      DEPARTMENT_IN_USE: [409, 'Move department members before changing its branch'],
+      DEPARTMENT_IN_USE: [409, 'Move department members and reconcile resources and transfer history before changing its branch'],
       INVALID_LEAD: [400, 'The lead must be an active employee of the selected branch'],
       DEPARTMENT_EXISTS: [409, 'A department with this name already exists in this branch']
     }, 'Duplicate department name')) return;

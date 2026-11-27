@@ -150,7 +150,7 @@ async function event(tx: Prisma.TransactionClient, assignmentId: string, actor: 
   } });
 }
 async function resourceEvent(tx: Prisma.TransactionClient, resource: {
-  id: string; assetCode: string; name: string; category: string; branchId: string;
+  id: string; assetCode: string; name: string; category: string; branchId: string;departmentId?:string|null;
   condition: string; status: ResourceStatus; location: string
 }, actor: Actor, action: string, nextStatus: ResourceStatus, nextCondition = resource.condition) {
   await tx.resourceAuditEvent.create({ data: {
