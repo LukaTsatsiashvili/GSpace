@@ -1,3 +1,4 @@
+import { BRANCH_MANAGER_PERMISSIONS } from './access-policy.js';
 import type { Prisma } from '@prisma/client';
 /** Store membership and authentication are separate. */
 export function canBelongToBranch(roleKey:string,kind:string){return kind!=='STORE'||roleKey==='BRANCH_MANAGER'||roleKey==='EMPLOYEE';}
@@ -9,7 +10,7 @@ export function leadDepartments(user:LoginUser){
  return user.ledDepartments.filter(d=>d.active&&d.branchId===user.branchId).map(d=>d.id);
 }
 export function canLoginUser(user:LoginUser){return user.active&&user.role.active&&user.branch.active&&canLoginAtBranch(user.role.key,user.branch.kind,leadDepartments(user));}
-export function effectivePermissions(user:LoginUser,grants:string[]){return user.role.key==='EMPLOYEE'?(leadDepartments(user).length?['approvals.request']:[]):grants;}
+export function effectivePermissions(user:LoginUser,grants:string[]){return user.role.key==='EMPLOYEE'?(leadDepartments(user).length?[...BRANCH_MANAGER_PERMISSIONS]:[]):grants;}
 /** On loss of the final qualifying lead appointment, invalidate existing credentials and invitations. */
 export async function revokeLostLeadAccess(tx:Prisma.TransactionClient,userId:string|null){
  if(!userId)return;

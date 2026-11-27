@@ -1,3 +1,4 @@
+import { departmentManager,departmentMatches,memberScope,resourceDepartmentScope,assignmentDepartmentScope,canManageDepartmentAssignment } from '../security/department-scope.js';
 import { AssignmentItemStatus, AssignmentKind, Prisma, ResourceStatus } from '@prisma/client';
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { z } from 'zod';
@@ -198,9 +199,9 @@ router.get('/lookups', run(async (_req, res) => {
   // Any employee may initiate a same-branch handover of their own accepted items.
   // Only managers receive available inventory and broad branch lookups.
   const [people, resources, branches] = await Promise.all([
-    db.user.findMany({ where: { ...(authorized ? where : { branchId: actor.branchId }), active: true },
+    db.user.findMany({ where: { ...(authorized ? where : { branchId: actor.branchId }), ...memberScope(actor), active: true },
       select: { id: true, fullName: true, branchId: true }, orderBy: { fullName: 'asc' } }),
-    authorized ? db.resource.findMany({ where: { ...where, status: 'AVAILABLE', branch: { active: true } },
+    authorized ? db.resource.findMany({ where: { ...where,...resourceDepartmentScope(actor), status: 'AVAILABLE', branch: { active: true } },
       select: { id: true, assetCode: true, name: true, condition: true, branchId: true },
       orderBy: { assetCode: 'asc' }, take: 500 }) : Promise.resolve([]),
     authorized ? db.branch.findMany({ where: { ...(isCentral(actor) ? {} : { id: actor.branchId }), active: true },
@@ -218,7 +219,7 @@ router.get('/', run(async (_req, res) => {
     } } }
   ] };
   const where: Prisma.AssignmentWhereInput = actor.permissions.includes('assignments.manage') ?
-    isCentral(actor) ? {} : { OR: [{ branchId: actor.branchId }, personal] } : personal;
+    isCentral(actor) ? {} : departmentManager(actor)?assignmentDepartmentScope(actor):{ OR: [{ branchId: actor.branchId }, personal] } : personal;
   const rows = await db.assignment.findMany({ where, include, orderBy: { createdAt: 'desc' }, take: 200 });
   const total = await db.assignment.count({ where });
   const all = rows.map(serialize);
@@ -253,7 +254,7 @@ router.post('/export', run(async (req, res) => {
     } } }
   ] };
   const permitted: Prisma.AssignmentWhereInput = actor.permissions.includes('assignments.manage') ?
-    isCentral(actor) ? {} : { OR: [{ branchId: actor.branchId }, personal] } : personal;
+    isCentral(actor) ? {} : departmentManager(actor)?assignmentDepartmentScope(actor):{ OR: [{ branchId: actor.branchId }, personal] } : personal;
   const selected = await db.assignment.findMany({
     where: { AND: [permitted, { id: { in: parsed.data.ids } }] },
     include,
@@ -293,7 +294,7 @@ router.post('/export', run(async (req, res) => {
 router.get('/:assignmentId', run(async (req, res) => {
   const actor = principal(res);
   const row = await db.assignment.findUnique({ where: { id: req.params.assignmentId }, include });
-  if (!row || !(canSee(actor, row) || row.items.some(item =>
+  if (!row || !await canManageDepartmentAssignment(db,actor,row.id) || !(canSee(actor, row) || row.items.some(item =>
     item.sourceItem?.assignment.recipientId === actor.userId))) {
     fail(res, 404, 'NOT_FOUND', 'Assignment not found'); return;
   }
@@ -308,7 +309,7 @@ router.get('/:assignmentId/items/:itemId/evidence', run(async (req, res) => {
     where: { id: req.params.assignmentId },
     select: { branchId: true, recipientId: true }
   });
-  if (!assignment || !canSee(actor, assignment)) {
+  if (!assignment || !await canManageDepartmentAssignment(db,actor,req.params.assignmentId) || !canSee(actor, assignment)) {
     fail(res, 404, 'NOT_FOUND', 'Assignment not found'); return;
   }
   const item = await db.assignmentItem.findFirst({
@@ -338,14 +339,14 @@ router.post('/', run(async (req, res) => {
       const assets = await tx.resource.findMany({ where: { id: { in: input.resourceIds } } });
       if (assets.length !== input.resourceIds.length || !unique(assets.map(x => x.id))) throw Error('INVALID_ASSETS');
       const branchId = assets[0].branchId;
-      if (!manages(actor, branchId) || assets.some(x => x.branchId !== branchId)) throw Error('INVALID_ASSETS');
+      if (!manages(actor, branchId) || assets.some(x => x.branchId !== branchId || !departmentMatches(actor,x.departmentId))) throw Error('INVALID_ASSETS');
       const branch = await tx.branch.findUniqueOrThrow({ where: { id: branchId } });
       if (!branch.active) throw Error('INACTIVE_BRANCH');
       const recipient = await tx.user.findUnique({ where: { id: input.recipientId } });
-      if (!recipient?.active || recipient.branchId !== branchId) throw Error('INVALID_RECIPIENT');
+      if (!recipient?.active || recipient.branchId !== branchId || !departmentMatches(actor,recipient.departmentId) || (departmentManager(actor)&&assets.some(x=>x.departmentId!==recipient.departmentId))) throw Error('INVALID_RECIPIENT');
       for (const asset of assets) {
         const updated = await tx.resource.updateMany({
-          where: { id: asset.id, status: 'AVAILABLE' }, data: { status: 'ASSIGNED' }
+          where: { id: asset.id, status: 'AVAILABLE' }, data: { status: 'ASSIGNED',...(branch.kind==='OFFICE'||(branch.kind==='LEGACY'&&branch.code==='HEAD_OFFICE')?{departmentId:recipient.departmentId}:{} ) }
         });
         if (updated.count !== 1) throw Error('NOT_AVAILABLE');
         await resourceEvent(tx, asset, actor, 'ASSIGNMENT_ISSUED', 'ASSIGNED');
@@ -377,6 +378,7 @@ router.post('/:assignmentId/receipt', run(async (req, res) => {
     const files = parsed.data.decisions.map(d => evidenceFile(d.evidence));
     await serializable(async tx => {
       const assignment = await load(tx, req.params.assignmentId);
+      if(!await canManageDepartmentAssignment(tx,actor,assignment.id))throw Error('FORBIDDEN');
       const onBehalfOf = assignment.recipientId !== actor.userId;
       if (onBehalfOf && (!parsed.data.onBehalfOf || !manages(actor, assignment.branchId)))
         throw Error('FORBIDDEN');
@@ -399,6 +401,8 @@ router.post('/:assignmentId/receipt', run(async (req, res) => {
             where: { id: item.sourceItemId, status: 'TRANSFER_PENDING' }, data: { status: 'TRANSFERRED' }
           });
           if (changed.count !== 1) throw Error('INVALID_ITEM');
+          const target=await tx.user.findUniqueOrThrow({where:{id:assignment.recipientId},include:{branch:true}});
+          if(target.branch.kind==='OFFICE'||(target.branch.kind==='LEGACY'&&target.branch.code==='HEAD_OFFICE'))await tx.resource.update({where:{id:item.resourceId},data:{departmentId:target.departmentId}});
         }
         await event(tx, assignment.id, actor, next, item.id, {
           resourceId: item.resourceId, damageReported: d.damageReported,
@@ -420,6 +424,7 @@ router.post('/:assignmentId/returns/request', run(async (req, res) => {
   try {
     await serializable(async tx => {
       const assignment = await load(tx, req.params.assignmentId);
+      if(!await canManageDepartmentAssignment(tx,actor,assignment.id))throw Error('FORBIDDEN');
       if (!manages(actor, assignment.branchId) && assignment.recipientId !== actor.userId) throw Error('FORBIDDEN');
       for (const id of parsed.data.itemIds) {
         const item = assignment.items.find(x => x.id === id);
@@ -443,6 +448,7 @@ router.post('/:assignmentId/returns/verify', run(async (req, res) => {
   try {
     await serializable(async tx => {
       const assignment = await load(tx, req.params.assignmentId);
+      if(!await canManageDepartmentAssignment(tx,actor,assignment.id))throw Error('FORBIDDEN');
       if (!manages(actor, assignment.branchId)) throw Error('FORBIDDEN');
       for (const entry of parsed.data.items) {
         const item = assignment.items.find(x => x.id === entry.itemId);
@@ -473,12 +479,13 @@ router.post('/:assignmentId/transfers', run(async (req, res) => {
     const dueAt = asDate(parsed.data.dueAt);
     const result = await serializable(async tx => {
       const source = await load(tx, req.params.assignmentId);
+      if(!await canManageDepartmentAssignment(tx,actor,source.id))throw Error('FORBIDDEN');
       if (!manages(actor, source.branchId) && source.recipientId !== actor.userId) throw Error('FORBIDDEN');
       if (source.recipientId === parsed.data.recipientId) throw Error('SAME_RECIPIENT');
       const recipient = await tx.user.findUnique({ where: { id: parsed.data.recipientId } });
-      if (!recipient?.active || recipient.branchId !== source.branchId) throw Error('INVALID_RECIPIENT');
+      if (!recipient?.active || recipient.branchId !== source.branchId || !departmentMatches(actor,recipient.departmentId)) throw Error('INVALID_RECIPIENT');
       const selected = parsed.data.itemIds.map(id => source.items.find(x => x.id === id));
-      if (selected.some(x => !x || x.status !== 'ACCEPTED')) throw Error('INVALID_ITEM');
+      if (selected.some(x => !x || x.status !== 'ACCEPTED' || (departmentManager(actor)&&x.resource.departmentId!==recipient.departmentId))) throw Error('INVALID_ITEM');
       for (const item of selected) {
         const changed = await tx.assignmentItem.updateMany({
           where: { id: item!.id, status: 'ACCEPTED' }, data: { status: 'TRANSFER_PENDING' }
@@ -508,6 +515,7 @@ router.post('/:assignmentId/transfers/cancel', run(async (req, res) => {
   try {
     await serializable(async tx => {
       const transfer = await load(tx, req.params.assignmentId);
+      if(!await canManageDepartmentAssignment(tx,actor,transfer.id))throw Error('FORBIDDEN');
       if (transfer.kind !== AssignmentKind.EMPLOYEE_TRANSFER) throw Error('INVALID_ITEM');
       const source = await tx.assignmentItem.findFirst({
         where: { id: transfer.items[0]?.sourceItemId ?? '' },

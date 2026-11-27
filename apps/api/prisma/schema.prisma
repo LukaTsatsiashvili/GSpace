@@ -72,6 +72,9 @@ model Department {
   lead      User?     @relation("DepartmentLead", fields: [leadUserId], references: [id], onDelete: SetNull)
   branch    Branch   @relation(fields: [branchId], references: [id], onDelete: Restrict)
   users     User[]
+  resources Resource[]
+  outgoingTransfers BranchTransfer[] @relation("TransferSourceDepartment")
+  incomingTransfers BranchTransfer[] @relation("TransferDestinationDepartment")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -180,6 +183,8 @@ model Resource {
   condition          String         @default("Good")
   branchId           String
   branch             Branch         @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  departmentId       String?
+  department         Department?    @relation(fields: [departmentId], references: [id], onDelete: Restrict)
   location           String         @default("")
   serialNumber       String?
   description        String         @default("")
@@ -198,6 +203,7 @@ model Resource {
   updatedAt          DateTime       @updatedAt
 
   @@index([branchId, status])
+  @@index([departmentId, status])
   @@index([category])
   @@index([createdAt])
 }
@@ -479,6 +485,10 @@ model BranchTransfer {
   source Branch @relation("TransferSource", fields: [sourceId], references: [id], onDelete: Restrict)
   destinationId String
   destination Branch @relation("TransferDestination", fields: [destinationId], references: [id], onDelete: Restrict)
+  sourceDepartmentId String?
+  sourceDepartment Department? @relation("TransferSourceDepartment", fields:[sourceDepartmentId],references:[id],onDelete:Restrict)
+  destinationDepartmentId String?
+  destinationDepartment Department? @relation("TransferDestinationDepartment", fields:[destinationDepartmentId],references:[id],onDelete:Restrict)
   senderId String
   sender User @relation("TransferSender", fields: [senderId], references: [id], onDelete: Restrict)
   recipientId String
