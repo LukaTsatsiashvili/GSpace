@@ -6,7 +6,7 @@ export type ApproverTarget = { kind: 'USER' | 'ROLE'; id: string };
 export type ApprovalStep = { mode: 'ANY' | 'ALL'; targets: ApproverTarget[] };
 export type ApprovalTypeRecord = {
   id: string; code: string; name: string; description: string; active: boolean; version: number;
-  fields: ApprovalField[]; steps: ApprovalStep[]; deadlineDays: number;
+  fields: ApprovalField[]; steps: ApprovalStep[]; deadlineDays: number; beneficiaryRequired: boolean;
 };
 export type ApprovalRequestRecord = {
   id: string; code: string; title: string; reason: string; amount: string | null;
@@ -15,6 +15,7 @@ export type ApprovalRequestRecord = {
   values: Record<string, string | string[]>; fields: ApprovalField[];
   typeId: string; type: string; typeCode: string; version: number;
   requesterId: string; requester: string; branchId: string; branch: string;
+  beneficiaryId: string | null; beneficiary: string | null; beneficiaryRequired: boolean;
   dueAt: string | null; createdAt: string; completedAt: string | null;
   canCancel: boolean; canResubmit: boolean; canReview: boolean;
   reviews: { id: string; step: number; reviewerId: string; reviewer: string;
@@ -26,11 +27,12 @@ export type ApprovalLookups = {
   branches: { id: string; name: string }[];
   users: { id: string; fullName: string }[];
   roles: { id: string; name: string }[];
+  employees: { id: string; fullName: string; branchId: string }[];
   canConfigure: boolean; canExport: boolean;
 };
 export type ApprovalTypeInput = Omit<ApprovalTypeRecord, 'id' | 'version'>;
 export type ApprovalSubmission = {
-  typeId: string; branchId: string; title: string; reason: string;
+  typeId: string; branchId: string; beneficiaryId: string | null; title: string; reason: string;
   amount: number | null; values: Record<string, string | string[]>;
 };
 async function responseError(response: Response): Promise<never> {
@@ -64,8 +66,8 @@ export const approvalsApi = {
   decision: (id: string, decision: 'APPROVED' | 'REJECTED' | 'CHANGES_REQUESTED', comment: string) =>
     call<{ ok: true }>('/' + encodeURIComponent(id) + '/decision', 'POST', { decision, comment }),
   cancel: (id: string) => call<{ ok: true }>('/' + encodeURIComponent(id) + '/cancel', 'POST', {}),
-  resubmit: (id: string, reason: string, values: Record<string, string | string[]>) =>
-    call<{ ok: true }>('/' + encodeURIComponent(id) + '/resubmit', 'POST', { reason, values })
+  resubmit: (id: string, reason: string, values: Record<string, string | string[]>, beneficiaryId: string | null) =>
+    call<{ ok: true }>('/' + encodeURIComponent(id) + '/resubmit', 'POST', { reason, values, beneficiaryId })
 };
 export async function exportApprovalCsv(requestIds: string[]) {
   const tokenResponse = await fetch('/api/v1/auth/csrf', { credentials: 'same-origin', cache: 'no-store' });
