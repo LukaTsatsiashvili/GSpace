@@ -94,6 +94,7 @@ model User {
   assignmentsIssued Assignment[] @relation("AssignmentIssuer")
   approvalRequests ApprovalRequest[] @relation("ApprovalRequester")
   approvalReviews ApprovalReview[] @relation("ApprovalReviewer")
+  approvalBeneficiaries ApprovalRequest[] @relation("ApprovalBeneficiary")
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
 }
@@ -354,6 +355,7 @@ model ApprovalTypeVersion {
   fields       Json              @default("[]")
   steps        Json              @default("[]")
   deadlineDays Int               @default(3)
+  beneficiaryRequired Boolean @default(false)
   requests     ApprovalRequest[]
   createdAt    DateTime          @default(now())
 
@@ -390,6 +392,8 @@ model ApprovalRequest {
   version      ApprovalTypeVersion   @relation(fields: [versionId], references: [id], onDelete: Restrict)
   requesterId  String
   requester    User                  @relation("ApprovalRequester", fields: [requesterId], references: [id], onDelete: Restrict)
+  beneficiaryId String?
+  beneficiary   User?                 @relation("ApprovalBeneficiary", fields: [beneficiaryId], references: [id], onDelete: Restrict)
   branchId     String
   branch       Branch                @relation(fields: [branchId], references: [id], onDelete: Restrict)
   title        String
@@ -407,6 +411,7 @@ model ApprovalRequest {
 
   @@index([branchId, status, createdAt])
   @@index([requesterId, createdAt])
+  @@index([beneficiaryId, createdAt])
   @@index([typeId, createdAt])
 }
 
