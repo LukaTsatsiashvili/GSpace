@@ -544,6 +544,7 @@ router.delete('/:resourceId', allowEdit, run(async (req, res) => {
       if (!prior) throw Error('NOT_FOUND');
       if (!([ResourceStatus.AVAILABLE, ResourceStatus.RETIRED] as ResourceStatus[]).includes(prior.status)) throw Error('IN_USE');
       // Never remove an asset with historical custody records, even after return.
+      if (await tx.branchTransferItem.count({ where: { resourceId: prior.id } }) > 0) throw Error('IN_USE');
       if (await tx.assignmentItem.count({ where: { resourceId: prior.id } }) > 0) throw Error('IN_USE');
       await tx.resource.delete({ where: { id: prior.id } });
       await event(tx, actor, prior, 'DELETED', auditResource(prior));
