@@ -239,10 +239,14 @@ export default function AdministrationOrganization({ kind, onChanged }: {
     void load(); onChanged();
   }
   return <>
-    {isBranch&&organization&&<div className="am-toolbar" style={{flexWrap:'wrap'}}>
-      {(['businessUnits','brands'] as const).map(k=><div key={k} style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}><strong>{k==='businessUnits'?'Business units':'Brands'}</strong>
-        {organization[k].map(g=><Button key={g.id} onClick={()=>setGroupEdit({kind:k,group:g})}>{g.name}{!g.active?' (Inactive)':''}</Button>)}
-        {canManage&&<Button onClick={()=>setGroupEdit({kind:k,group:null})}>+ Add {k==='businessUnits'?'unit':'brand'}</Button>}</div>)}
+    {isBranch&&organization&&<div className="am-organization-groups">
+      {(['businessUnits','brands'] as const).map(k=><div key={k} className="am-organization-group">
+        <div className="am-organization-group-content">
+          <strong className="am-organization-group-label">{k==='businessUnits'?'Business units':'Brands'}</strong>
+          <div className="am-organization-group-items">{organization[k].map(g=><Button key={g.id} onClick={()=>setGroupEdit({kind:k,group:g})}>{g.name}{!g.active?' (Inactive)':''}</Button>)}</div>
+        </div>
+        {canManage&&<Button className="am-organization-add" variant="primary" icon={<Plus size={16}/>} onClick={()=>setGroupEdit({kind:k,group:null})}>Add {k==='businessUnits'?'unit':'brand'}</Button>}
+      </div>)}
     </div>}
     <div className="am-toolbar">
       <SearchInput className="am-search" aria-label={isBranch ? 'Search branches' : 'Search departments'}
@@ -254,7 +258,7 @@ export default function AdministrationOrganization({ kind, onChanged }: {
       <Select label="Filter brand" value={brand} options={['All brands',...organization.brands.filter(g=>unit==='All business units'||organization.branches.some(b=>b.brandId===g.id&&b.businessUnit===unit)).map(g=>g.name)]} onChange={v=>{setBrand(v);setBranchFilter('All branches');}}/>
       {!isBranch&&<Select label="Filter branch" value={branchFilter} options={['All branches',...organization.branches.filter(b=>(unit==='All business units'||b.businessUnit===unit)&&(brand==='All brands'||b.brand===brand)).map(b=>b.name)]} onChange={setBranchFilter}/>}</>}
       <span className="am-spacer"/>
-      {canManage && <Button variant="primary" icon={<Plus size={16}/>}
+      {canManage && <Button className={isBranch?'am-organization-add':''} variant="primary" icon={<Plus size={16}/>}
         onClick={() => setEditor(null)}>{isBranch ? 'Add branch' : 'Add department'}</Button>}
     </div>
     {error && <div className="am-empty" role="alert">{error} <Button onClick={() => void load()}>Retry</Button></div>}
