@@ -1,6 +1,6 @@
 import { OrganizationFilters,useOrganizationFilter } from '../components/OrganizationFilters';
 import { useCallback, useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from 'react';
-import { ArrowLeftRight, Check, Copy, Plus, X } from 'lucide-react';
+import { ArrowLeftRight, Check, Copy, X } from 'lucide-react';
 import { Button, Input, SearchInput, Select, Textarea } from '../components/ui';
 import { useAuth } from '../auth/AuthGate';
 import { useToast } from '../components/toast';
@@ -273,7 +273,6 @@ export default function AdministrationUsers({ openCreate, closeCreate, onSummary
   const [editing, setEditing] = useState<Account | null>(null);
   const [resetting, setResetting] = useState<Account | null>(null);
   const [invite, setInvite] = useState<string | null>(null);
-  const [createInternal, setCreateInternal] = useState(false);
   const toast = useToast();
   const { user: me } = useAuth();
 
@@ -301,14 +300,13 @@ export default function AdministrationUsers({ openCreate, closeCreate, onSummary
       && (status === 'All statuses' || state === status) && (departmentFilter==='All departments'||u.department?.name===departmentFilter);
   }), [users, search, role, branch, status,organizationFilter,departmentFilter]);
   function saved(activationPath: string | null) {
-    setEditing(null); setCreateInternal(false); closeCreate(); setSelected(null); setResetting(null);
+    setEditing(null); closeCreate(); setSelected(null); setResetting(null);
     if (activationPath) setInvite(activationPath);
     else toast.success('Account updated successfully.');
     void load();
   }
-  const isCreating = openCreate || createInternal;
-  const openNew = () => { setEditing(null); setCreateInternal(true); };
-  const closeNew = () => { setCreateInternal(false); closeCreate(); };
+  const isCreating = openCreate;
+  const closeNew = closeCreate;
   function onRowKey(e: KeyboardEvent<HTMLTableRowElement>, user: Account) {
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelected(user); }
   }
@@ -319,8 +317,6 @@ export default function AdministrationUsers({ openCreate, closeCreate, onSummary
       <Select className="am-filter" label="Filter role" options={['All roles', ...lookups.roles.map(r => r.name)]} value={role} onChange={setRole}/>
       <Select className="am-filter" label="Filter user status" options={['All statuses','Active','Inactive','Pending']} value={status} onChange={setStatus}/>
       <OrganizationFilters filter={organizationFilter}/><Select label="Filter department" value={departmentFilter} options={['All departments',...new Set(users.filter(u=>organizationFilter.matches(u.branch.id)).flatMap(u=>u.department?[u.department.name]:[])),...(departmentFilter==='All departments'?[]:[departmentFilter])].filter((v,i,a)=>a.indexOf(v)===i)} onChange={setDepartmentFilter}/><Button onClick={()=>{setSearch('');setRole('All roles');setStatus('All statuses');setBranch('All branches');setDepartmentFilter('All departments');organizationFilter.reset();}}>Clear filters</Button>{!organizationFilter.branches.length&&<Select className="am-filter" label="Filter branch" options={['All branches', ...lookups.branches.map(b => b.name)]} value={branch} onChange={setBranch}/>}
-      <span className="am-spacer"/>
-      <Button variant="primary" icon={<Plus size={16}/>} onClick={openNew}>Add user</Button>
     </div>
     {error && <div className="am-empty" role="alert">{error} <Button onClick={() => void load()}>Retry</Button></div>}
     {loading ? <div className="am-empty">Loading users from PostgreSQL...</div> : <>
