@@ -1,3 +1,4 @@
+import { OrganizationFilters,useOrganizationFilter } from '../components/OrganizationFilters';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   ArrowDownToLine, ArrowLeftRight, Boxes, Check, ClipboardList, Grid2X2, Wrench, Users, Box,
@@ -13,7 +14,7 @@ import BulkResourceDialog from './BulkResourceDialog';
 import ResourceCategoriesDialog from './ResourceCategoriesDialog';
 import {
   resourceApi, exportResourceCsv, type ResourceRecord, type ResourceStatus,
-  type ResourceSummary, type Category, type Branch, type AuditEntry
+  type ResourceSummary, type Category, type Branch, type ResourceDepartment, type AuditEntry
 } from './resource-api';
 import './resources.css';
 
@@ -151,7 +152,7 @@ function ResourceDrawer({ resource, categories, close, canEdit, canDelete, onEdi
               {detail('Category', resource.category)}
               {detail('Resource type', resource.resourceType)}
               {detail('Condition', resource.condition)}
-              {detail('Branch', resource.branch)}
+              {detail('Branch', resource.branch)}{detail('Department',resource.department??'Unallocated')}
               {resource.assignedTo && detail('Assigned to', <div className="rs-assignee-cell">
                 <strong>{resource.assignedTo.userName}</strong>
                 <small>{receiptLabel(resource.assignedTo.itemStatus)}</small>
@@ -241,6 +242,7 @@ export default function ResourcesPage() {
   const [summary, setSummary] = useState<ResourceSummary>({ total: 0, assigned: 0, available: 0, maintenance: 0, branches: 0 });
   const [categories, setCategories] = useState<Category[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
+  const [departments,setDepartments]=useState<ResourceDepartment[]>([]);
   const [truncated, setTruncated] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -249,6 +251,7 @@ export default function ResourcesPage() {
   const [status, setStatus] = useState<string>('All statuses');
   const [category, setCategory] = useState('All categories');
   const [branch, setBranch] = useState('All branches');
+  const organizationFilter=useOrganizationFilter();
   const [view, setView] = useState<View>('list');
   const [selected, setSelected] = useState<ResourceRecord | null>(null);
   const [editing, setEditing] = useState<ResourceRecord | null>(null);
@@ -260,7 +263,7 @@ export default function ResourcesPage() {
     try {
       const [list, catalog] = await Promise.all([resourceApi.list(), resourceApi.catalog()]);
       setResources(list.resources); setSummary(list.summary); setTruncated(list.truncated);
-      setCategories(catalog.categories); setBranches(catalog.branches);
+      setCategories(catalog.categories); setBranches(catalog.branches);setDepartments(catalog.departments??[]);
     } catch (err) { setError(err instanceof Error ? err.message : 'Unable to load Resources.'); }
     finally { setLoading(false); }
   }, []);
@@ -273,9 +276,9 @@ export default function ResourcesPage() {
         resource.branch].some(value => value.toLowerCase().includes(term))) &&
       (status === 'All statuses' || resource.status === statusFilters[status]) &&
       (category === 'All categories' || resource.category === category) &&
-      (branch === 'All branches' || resource.branch === branch);
-  }), [resources, activeTab, search, status, category, branch]);
-  const clearFilters = () => { setSearch(''); setStatus('All statuses'); setCategory('All categories'); setBranch('All branches'); };
+      (branch === 'All branches' || resource.branch === branch) && organizationFilter.matches(resource.branchId);
+  }), [resources, activeTab, search, status, category, branch,organizationFilter]);
+  const clearFilters = () => { setSearch(''); setStatus('All statuses'); setCategory('All categories'); setBranch('All branches'); organizationFilter.reset(); };
   function saved(message: string) {
     setAdding(false); setEditing(null); setBulkOpen(false); setCategoryOpen(false); setSelected(null);
     toast.success(message); void load();
@@ -319,7 +322,7 @@ export default function ResourcesPage() {
           placeholder="Search by name, ID or serial..." value={search}
           onChange={event => setSearch(event.target.value)}/>
         <SelectMenu label="Filter status" value={status} options={statuses} onChange={setStatus}/>
-        <SelectMenu label="Filter branch" value={branch} options={['All branches', ...branches.map(b => b.name)]} onChange={setBranch}/>
+        <OrganizationFilters filter={organizationFilter}/>{!organizationFilter.branches.length&&<SelectMenu label="Filter branch" value={branch} options={['All branches', ...branches.map(b => b.name)]} onChange={setBranch}/>}
         <SelectMenu label="Filter type" value={category === 'All categories' ? 'All types' : category}
           options={['All types', ...categories.map(c => c.name)]}
           onChange={value => setCategory(value === 'All types' ? 'All categories' : value)}/>
@@ -379,7 +382,7 @@ export default function ResourcesPage() {
         setResources(records => records.map(record => record.id === updated.id ? updated : record));
       }}/>}
     {(adding || editing) && <NewResourceDialog key={editing?.id ?? 'new'} resource={editing}
-      branches={branches} categories={categories}
+      branches={branches} categories={categories} departments={departments}
       close={() => { setAdding(false); setEditing(null); }}
       saved={code => saved(code + (editing ? ' updated.' : ' registered.'))}
       onDocumentsChange={updated => {

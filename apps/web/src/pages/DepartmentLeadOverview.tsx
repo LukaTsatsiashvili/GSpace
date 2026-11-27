@@ -1,0 +1,9 @@
+import {useEffect,useState} from 'react';
+import {Button,Card,PageHeader} from '../components/ui';
+type Data={departments:{id:string;name:string}[];members:{id:string;fullName:string;departmentId:string|null}[];resources:{id:string;assetCode:string;name:string;employeeId:string;employeeName:string;status:string}[]};
+export default function DepartmentLeadOverview(){
+ const [data,setData]=useState<Data|null>(null);const [error,setError]=useState('');const [revision,setRevision]=useState(0);
+ useEffect(()=>{let active=true;setError('');fetch('/api/v1/department-lead',{credentials:'same-origin',cache:'no-store'}).then(r=>{if(!r.ok)throw Error('Department access unavailable');return r.json() as Promise<Data>}).then(d=>{if(active)setData(d)}).catch(e=>{if(active){setData(null);setError(e.message)}});return()=>{active=false}},[revision]);
+ return <div className="dl-overview"><PageHeader title="My departments" eyebrow="HEAD OFFICE / DEPARTMENT LEAD" badgeLabel="Live data" description="Employees and current assigned resources in the departments you lead." actions={<Button variant="primary" onClick={()=>{window.location.hash='approvals'}}>Requests & Approvals</Button>}/>
+ {error?<Card><p role="alert">{error}</p><Button onClick={()=>setRevision(n=>n+1)}>Retry</Button></Card>:!data?<Card>Loading departments...</Card>:data.departments.map(d=><Card key={d.id}><h2>{d.name}</h2><div className="dl-overview-list">{data.members.filter(m=>m.departmentId===d.id).map(m=><div key={m.id}><div className="dl-overview-row"><strong>{m.fullName}</strong><small>{data.resources.filter(r=>r.employeeId===m.id).length} assigned resources</small></div>{data.resources.filter(r=>r.employeeId===m.id).map(r=><div className="dl-overview-row" key={r.id}><span>{r.assetCode} · {r.name}</span><small>{r.status.replaceAll('_',' ')}</small></div>)}</div>)}{!data.members.some(m=>m.departmentId===d.id)&&<p>No active department members.</p>}</div></Card>)}</div>;
+}

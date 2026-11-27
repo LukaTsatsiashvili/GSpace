@@ -1,3 +1,4 @@
+import { canLoginUser,leadDepartments,leadAccessInclude,effectivePermissions } from '../security/organization-policy.js';
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
 import { db } from '../db.js';
@@ -38,16 +39,18 @@ router.post('/activate', asyncRoute(async (req, res) => {
   const now = new Date();
   const invitation = await db.accountInvitation.findUnique({
     where: { tokenHash: inviteTokenHash(input.data.token) },
-    include: { user: { include: { role: true, branch: true } } }
+    include: { user: { include: { role: true, branch: true,ledDepartments:leadAccessInclude } } }
   });
   if (!invitation || invitation.usedAt || invitation.expiresAt <= now ||
-      !invitation.user.active || !invitation.user.role.active || invitation.user.role.key === 'EMPLOYEE' || !invitation.user.branch.active) {
+      !invitation.user.active || !invitation.user.role.active || !canLoginUser(invitation.user) || !invitation.user.branch.active) {
     res.status(400).json({ error: { code: 'INVALID_ACTIVATION', message: 'This activation link is expired or unavailable' } });
     return;
   }
   const passwordHash = await hashPassword(input.data.password);
   try {
     await db.$transaction(async tx => {
+      const current=await tx.user.findUnique({where:{id:invitation.userId},include:{role:true,branch:true,ledDepartments:leadAccessInclude}});
+      if(!current||!canLoginUser(current))throw Error('TOKEN_USED');
       const claim = await tx.accountInvitation.updateMany({
         where: { id: invitation.id, usedAt: null, expiresAt: { gt: new Date() } },
         data: { usedAt: new Date() }
@@ -95,13 +98,13 @@ router.post('/login', asyncRoute(async (req, res) => {
   const user = await db.user.findUnique({
     where: { email }, include: {
       credential: true, role: { include: { grants: { include: { permission: true } } } },
-      branch: true, department: true
+      branch: true, department: true,ledDepartments:leadAccessInclude
     }
   });
   const valid = user?.credential
     ? await verifyPassword(input.data.password, user.credential.passwordHash)
     : (await burnPasswordCheck(input.data.password), false);
-  const eligible = !!user && !!valid && !user.credential?.loginDisabled && user.active && user.branch.active && user.role.active && user.role.key !== 'EMPLOYEE';
+  const eligible = !!user && !!valid && !user.credential?.loginDisabled && user.active && user.branch.active && user.role.active && canLoginUser(user);
   if (!eligible) {
     await recordFailedLogin(throttleKey);
     await db.securityAuditEvent.create({ data: {
@@ -127,9 +130,10 @@ router.post('/login', asyncRoute(async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   res.json({ user: {
     id: user.id, email: user.email, fullName: user.fullName,
-    role: { key: user.role.key, name: user.role.name, permissions: user.role.grants.map(g => g.permission.key) },
+    role: { key: user.role.key, name: user.role.name, permissions: effectivePermissions(user,user.role.grants.map(g => g.permission.key)) },
     branch: { id: user.branch.id, name: user.branch.name },
     department: user.department ? { id: user.department.id, name: user.department.name } : null,
+    leadDepartmentIds:leadDepartments(user),
     mustChangePassword: !!user.credential?.mustChangePassword
   }, sessionId: session.id });
 }));

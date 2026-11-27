@@ -47,6 +47,8 @@ export function Select({ value, options, onChange, label, className = '' }: {
   const [menuTheme, setMenuTheme] = useState<CSSProperties>({});
   const trigger = useRef<HTMLButtonElement>(null);
   const menu = useRef<HTMLDivElement>(null);
+  const measure = useRef<HTMLSpanElement>(null);
+  // A hidden intrinsic sizing layer uses every option, never just the current value.
   const calculate = () => {
     const element = trigger.current;
     if (!element) return;
@@ -55,14 +57,15 @@ export function Select({ value, options, onChange, label, className = '' }: {
     // Copy theme tokens so its colors remain identical to the originating control.
     const computed = getComputedStyle(element);
     const tokens = ['--surface', '--surface2', '--text', '--muted', '--border', '--accent', '--accent-soft'];
-    setMenuTheme(Object.fromEntries(tokens.map(token => [token, computed.getPropertyValue(token).trim()])) as CSSProperties);
+    setMenuTheme({ ...Object.fromEntries(tokens.map(token => [token, computed.getPropertyValue(token).trim()])), fontFamily: computed.fontFamily } as CSSProperties);
+    const width = Math.min(Math.max(rect.width, measure.current?.getBoundingClientRect().width ?? 0), Math.max(0, window.innerWidth - 16));
     const below = window.innerHeight - rect.bottom;
     const above = rect.top;
     const desiredHeight = Math.min(options.length * 39 + 12, 370);
     const showAbove = below < Math.min(desiredHeight, 190) && above > below;
     const available = Math.max(80, (showAbove ? above : below) - 14);
     const maxHeight = Math.min(desiredHeight, available);
-    setPosition({ top: showAbove ? rect.top - 6 - maxHeight : rect.bottom + 6, left: Math.max(8, Math.min(rect.left, window.innerWidth - rect.width - 8)), width: rect.width, maxHeight });
+    setPosition({ top: showAbove ? rect.top - 6 - maxHeight : rect.bottom + 6, left: Math.max(8, Math.min(rect.left, window.innerWidth - width - 8)), width, maxHeight });
   };
   useEffect(() => {
     if (!open) return;
@@ -79,8 +82,10 @@ export function Select({ value, options, onChange, label, className = '' }: {
     document.addEventListener('keydown', key);
     return () => { window.removeEventListener('scroll', onScroll, true); window.removeEventListener('resize', close); document.removeEventListener('keydown', key); };
   }, [open]);
-  return <div className={`ui-select-wrap ${className}`}><button ref={trigger} type="button" className="ui-select" aria-label={label} aria-haspopup="listbox" aria-expanded={open} onClick={() => { if (!open) calculate(); setOpen(!open); }}><span>{value}</span><ChevronDown size={15}/></button>
-    {open && createPortal(<><button type="button" className="ui-select-dismiss" aria-label="Close dropdown" onClick={() => setOpen(false)}/><div ref={menu} className="ui-select-options" role="listbox" aria-label={label} style={{ ...menuTheme, top: position.top, left: position.left, width: position.width, maxHeight: position.maxHeight }}>{options.map(option => <button type="button" key={option} role="option" aria-selected={option === value} onClick={() => { onChange(option); setOpen(false); }}>{option}{option === value && <Check size={14}/>}</button>)}</div></>, document.body)}
+  return <div className={`ui-select-wrap ${className}`}>
+    <span className="ui-select-size" aria-hidden="true"><span className="ui-select-measure" ref={measure}>{options.map((option,index) => <span key={index}>{option}</span>)}{!options.includes(value) && <span>{value}</span>}</span></span>
+    <button ref={trigger} type="button" className="ui-select" aria-label={label} aria-haspopup="listbox" aria-expanded={open} onClick={() => { if (!open) calculate(); setOpen(!open); }}><span>{value}</span><ChevronDown size={15}/></button>
+    {open && createPortal(<><button type="button" className="ui-select-dismiss" aria-label="Close dropdown" onClick={() => setOpen(false)}/><div ref={menu} className="ui-select-options" role="listbox" aria-label={label} style={{ ...menuTheme, top: position.top, left: position.left, width: position.width, maxHeight: position.maxHeight }}>{options.map(option => <button type="button" key={option} role="option" aria-selected={option === value} onClick={() => { onChange(option); setOpen(false); }} ><span>{option}</span>{option === value && <Check size={14}/>}</button>)}</div></>, document.body)}
   </div>;
 }
 

@@ -1,3 +1,4 @@
+import { departmentManager,resourceDepartmentScope } from '../security/department-scope.js';
 import { Prisma, ResourceStatus } from '@prisma/client';
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
@@ -26,7 +27,7 @@ const documentInput = z.object({
   base64: z.string().min(1).max(2_900_000)
 }).strict();
 const input = z.object({
-  name, category: name, branchId: uuid, resourceType,
+  name, category: name, branchId: uuid, departmentId:uuid.nullable().optional(), resourceType,
   condition, status: z.enum(['AVAILABLE', 'RETIRED']).default('AVAILABLE'),
   location: z.string().trim().max(240).default(''),
   serialNumber: z.string().trim().max(120).nullable().default(null),
@@ -61,12 +62,12 @@ function usesFinance(data: ResourceInput) {
   return data.purchasePrice !== null || data.purchaseDate !== null || data.supplier !== '' ||
     data.usefulLifeMonths !== null || data.residualValue !== null;
 }
-function auditResource(row: { id: string; assetCode: string; name: string; category: string; branchId: string; condition: string; status: string; location: string }) {
+function auditResource(row: { id: string; assetCode: string; name: string; category: string; branchId: string; departmentId?:string|null; condition: string; status: string; location: string }) {
   return { id: row.id, assetCode: row.assetCode, name: row.name, category: row.category,
-    branchId: row.branchId, condition: row.condition, status: row.status, location: row.location };
+    branchId: row.branchId,departmentId:row.departmentId??null, condition: row.condition, status: row.status, location: row.location };
 }
 const include = {
-  branch: { select: { id: true, name: true } },
+  branch: { select: { id: true, name: true } },department:{select:{id:true,name:true}},
   documents: { select: { id: true, filename: true, mimeType: true, byteSize: true, createdAt: true }, orderBy: { createdAt: 'asc' } }
 } satisfies Prisma.ResourceInclude;
 type ResourceRow = Prisma.ResourceGetPayload<{ include: typeof include }>;
@@ -75,7 +76,7 @@ function serialize(row: ResourceRow, actor: AuthPrincipal, assignedTo: ResourceC
   return {
     id: row.id, assetCode: row.assetCode, name: row.name, category: row.category,
     resourceType: row.resourceType, condition: row.condition, status: row.status,
-    branchId: row.branchId, branch: row.branch.name, location: row.location,
+    branchId: row.branchId, branch: row.branch.name, departmentId:row.departmentId,department:row.department?.name??null, location: row.location,
     serialNumber: row.serialNumber, description: row.description, warrantyEnd: row.warrantyEnd,
     customFields: row.customFields, documents: row.documents,
     assignedTo: row.status === 'ASSIGNED' ? assignedTo : null,
@@ -131,6 +132,7 @@ async function validate(
   const branch = await tx.branch.findUnique({ where: { id: values.branchId } });
   if (!branch?.active) throw Error('INVALID_BRANCH');
   if (!canAccessBranch(actor.roleKey, actor.branchId, branch.id)) throw Error('INVALID_BRANCH');
+  if(values.departmentId&&(!isCentral(actor)||!await tx.department.findFirst({where:{id:values.departmentId,branchId:branch.id,active:true,branch:{kind:{in:['OFFICE','LEGACY']}}}})))throw Error('INVALID_DEPARTMENT');
   const category = await tx.resourceCategory.findFirst({ where: { name: values.category, active: true } });
   if (!category) throw Error('INVALID_CATEGORY');
   const defs = z.array(fieldDefinition).max(20).safeParse(category.definitions);
@@ -152,7 +154,7 @@ function createData(values: ResourceInput) {
   return {
     name: values.name, category: values.category, resourceType: values.resourceType,
     condition: values.condition, status: values.status as ResourceStatus,
-    branchId: values.branchId, location: values.location, serialNumber: values.serialNumber || null,
+    branchId: values.branchId, ...(values.departmentId!==undefined?{departmentId:values.departmentId}:{}), location: values.location, serialNumber: values.serialNumber || null,
     description: values.description, warrantyEnd: validDate(values.warrantyEnd),
     purchaseDate: validDate(values.purchaseDate), purchasePrice: asMoney(values.purchasePrice),
     currency: values.currency, supplier: values.supplier, usefulLifeMonths: values.usefulLifeMonths,
@@ -162,6 +164,7 @@ function createData(values: ResourceInput) {
 function handleError(err: unknown, res: Response) {
   const errors: Record<string, [number, string]> = {
     INVALID_BRANCH: [400, 'Choose an accessible, active branch'],
+    INVALID_DEPARTMENT:[400,'Choose an active office department in the selected branch'],
     INVALID_CATEGORY: [400, 'Choose an active category with valid field definitions'],
     INVALID_CUSTOM_FIELDS: [400, 'One or more custom fields do not belong to the category'],
     REQUIRED_CUSTOM_FIELD: [400, 'Complete the required category fields'],
@@ -218,19 +221,20 @@ router.use(requireAuth, requirePermission('assets.view'));
 
 router.get('/catalog', run(async (_req, res) => {
   const actor = principal(res);
-  const [categories, branches] = await Promise.all([
+  const [categories, branches,departments] = await Promise.all([
     db.resourceCategory.findMany({ where: { active: true }, orderBy: { name: 'asc' } }),
     db.branch.findMany({ where: isCentral(actor) ? { active: true } : { active: true, id: actor.branchId },
-      select: { id: true, name: true }, orderBy: { name: 'asc' } })
+      select: { id: true, name: true }, orderBy: { name: 'asc' } }),
+    db.department.findMany({where:{active:true,...(isCentral(actor)?{}:{branchId:actor.branchId}),...(departmentManager(actor)?{id:{in:actor.leadDepartmentIds}}:{})},select:{id:true,name:true,branchId:true},orderBy:{name:'asc'}})
   ]);
   res.json({ categories: categories.map(x => ({
     id: x.id, name: x.name, definitions: x.definitions
-  })), branches });
+  })), branches,departments });
 }));
 
 router.get('/', run(async (req, res) => {
   const actor = principal(res);
-  const scope = isCentral(actor) ? {} : { branchId: actor.branchId };
+  const scope:Prisma.ResourceWhereInput = isCentral(actor) ? {} : { branchId: actor.branchId,...resourceDepartmentScope(actor) };
   const rows = await db.resource.findMany({
     where: scope, include, orderBy: { createdAt: 'desc' }, take: 500
   });
@@ -255,7 +259,7 @@ router.post('/export', requirePermission('reports.export'), run(async (req, res)
   const actor = principal(res);
   const rows = await db.resource.findMany({
     where: { id: { in: parsed.data.ids },
-      ...(isCentral(actor) ? {} : { branchId: actor.branchId }) },
+      ...(isCentral(actor) ? {} : { branchId: actor.branchId }),...resourceDepartmentScope(actor) },
     include: { branch: { select: { name: true } } }, orderBy: { assetCode: 'asc' }
   });
   const escapeCsv = (value: string) => {
@@ -279,20 +283,22 @@ router.post('/export', requirePermission('reports.export'), run(async (req, res)
 
 router.get('/:resourceId/audit', run(async (req, res) => {
   const actor = principal(res);
-  const found = await db.resource.findUnique({ where: { id: req.params.resourceId }, select: { branchId: true } });
+  const found = await db.resource.findFirst({ where: { id: req.params.resourceId,...resourceDepartmentScope(actor) }, select: { branchId: true } });
   if (!found || !canAccessBranch(actor.roleKey, actor.branchId, found.branchId)) {
     fail(res, 404, 'NOT_FOUND', 'Resource not found'); return;
   }
   const events = await db.resourceAuditEvent.findMany({
     where: { resourceId: req.params.resourceId }, orderBy: { createdAt: 'desc' }, take: 100
   });
-  res.json({ events });
+  const owned=new Set(actor.leadDepartmentIds??[]);
+  const safe=(v:Prisma.JsonValue)=>v!==null&&typeof v==='object'&&!Array.isArray(v)&&typeof v.departmentId==='string'&&owned.has(v.departmentId);
+  res.json({ events:departmentManager(actor)?events.filter(e=>safe(e.before)&&safe(e.after)):events });
 }));
 
 router.get('/:resourceId/documents/:documentId', run(async (req, res) => {
   const actor = principal(res);
-  const resource = await db.resource.findUnique({
-    where: { id: req.params.resourceId }, select: { branchId: true }
+  const resource = await db.resource.findFirst({
+    where: { id: req.params.resourceId,...resourceDepartmentScope(actor) }, select: { branchId: true }
   });
   if (!resource || !canAccessBranch(actor.roleKey, actor.branchId, resource.branchId)) {
     fail(res, 404, 'NOT_FOUND', 'Document not found'); return;
@@ -422,8 +428,8 @@ router.delete('/:resourceId/documents/:documentId', allowEdit, run(async (req, r
 
 router.get('/:resourceId/assignments', run(async (req, res) => {
   const actor = principal(res);
-  const resource = await db.resource.findUnique({
-    where: { id: req.params.resourceId }, select: { id: true, branchId: true }
+  const resource = await db.resource.findFirst({
+    where: { id: req.params.resourceId,...resourceDepartmentScope(actor) }, select: { id: true, branchId: true }
   });
   if (!resource || !canAccessBranch(actor.roleKey, actor.branchId, resource.branchId)) {
     fail(res, 404, 'NOT_FOUND', 'Resource not found'); return;
@@ -432,12 +438,13 @@ router.get('/:resourceId/assignments', run(async (req, res) => {
     currentCustodyByResource([resource.id]), resourceAssignmentHistory(resource.id)
   ]);
   res.setHeader('Cache-Control', 'private, no-store');
+  if(departmentManager(actor)){const members=await db.user.findMany({where:{branchId:actor.branchId,departmentId:{in:actor.leadDepartmentIds??[]}},select:{id:true}});const ids=new Set(members.map(m=>m.id));const assignments=history.assignments.filter(h=>ids.has(h.recipientId));const current=custody.get(resource.id);res.json({current:current&&ids.has(current.userId)?{...current,pendingRecipientName:null}:null,assignments,total:assignments.length,truncated:history.truncated});return;}
   res.json({ current: custody.get(resource.id) ?? null, ...history });
 }));
 
 router.get('/:resourceId', run(async (req, res) => {
   const actor = principal(res);
-  const row = await db.resource.findUnique({ where: { id: req.params.resourceId }, include });
+  const row = await db.resource.findFirst({ where: { id: req.params.resourceId,...resourceDepartmentScope(actor) }, include });
   if (!row || !canAccessBranch(actor.roleKey, actor.branchId, row.branchId)) {
     fail(res, 404, 'NOT_FOUND', 'Resource not found'); return;
   }
@@ -481,12 +488,14 @@ router.patch('/:resourceId', allowEdit, run(async (req, res) => {
       if (!prior || !canAccessBranch(actor.roleKey, actor.branchId, prior.branchId)) throw Error('NOT_FOUND');
       if (!([ResourceStatus.AVAILABLE, ResourceStatus.RETIRED] as ResourceStatus[]).includes(prior.status)) throw Error('LIFECYCLE_LOCKED');
       if (!isCentral(actor) && parsed.data.branchId !== prior.branchId) throw Error('INVALID_BRANCH');
+      if(parsed.data.departmentId!==undefined&&!isCentral(actor))throw Error('INVALID_DEPARTMENT');
+      if(prior.branchId!==parsed.data.branchId&&parsed.data.departmentId===undefined)parsed.data.departmentId=null;
       await validate(tx, { ...parsed.data, documents: [] }, actor);
       // Editors without finance.edit must never erase or overwrite financial metadata.
       const edits = createData({ ...parsed.data, documents: [] });
       const data = actor.permissions.includes('finance.edit') ? edits : {
         name: edits.name, category: edits.category, resourceType: edits.resourceType,
-        condition: edits.condition, status: edits.status, branchId: edits.branchId,
+        condition: edits.condition, status: edits.status, branchId: edits.branchId,departmentId:edits.departmentId,
         location: edits.location, serialNumber: edits.serialNumber,
         description: edits.description, warrantyEnd: edits.warrantyEnd,
         customFields: edits.customFields
@@ -544,6 +553,7 @@ router.delete('/:resourceId', allowEdit, run(async (req, res) => {
       if (!prior) throw Error('NOT_FOUND');
       if (!([ResourceStatus.AVAILABLE, ResourceStatus.RETIRED] as ResourceStatus[]).includes(prior.status)) throw Error('IN_USE');
       // Never remove an asset with historical custody records, even after return.
+      if (await tx.branchTransferItem.count({ where: { resourceId: prior.id } }) > 0) throw Error('IN_USE');
       if (await tx.assignmentItem.count({ where: { resourceId: prior.id } }) > 0) throw Error('IN_USE');
       await tx.resource.delete({ where: { id: prior.id } });
       await event(tx, actor, prior, 'DELETED', auditResource(prior));

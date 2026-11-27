@@ -10,7 +10,7 @@
 .am-catalog .section-tab{padding:16px 13px;font-size:12px}
 .am-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:17px 19px}
 .am-toolbar .am-search.ui-search{width:min(300px,100%)}
-.am-toolbar .am-filter{width:145px;max-width:100%}
+.am-toolbar .am-filter{max-width:100%}
 .am-spacer{flex:1}
 .am-table-scroll{width:100%;overflow-x:auto}
 .am-table{border-collapse:collapse;text-align:left;width:100%;min-width:940px}
@@ -120,7 +120,7 @@
 .am-notice p{font-size:12px;line-height:1.7;color:var(--muted);overflow-wrap:anywhere;margin:0 0 20px}
 .am-notice .ui-button{width:100%}
 @media(max-width:1250px){.am-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.am-role-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:800px){.am-toolbar .am-search.ui-search{width:100%}.am-toolbar .am-filter{flex:1;min-width:145px}}
+@media(max-width:800px){.am-toolbar .am-search.ui-search{width:100%}}
 @media(max-width:650px){
  .am-page .page-header{flex-direction:column;align-items:flex-start}
  .am-role-grid{grid-template-columns:1fr;padding:13px}
@@ -153,3 +153,13 @@
   .am-invitation-content{gap:16px}
   .am-invitation-content .am-invitation-guidance,.am-invitation-link{padding:15px}
 }
+
+/* Organization rows share the same right edge and global primary button. */
+.am-organization-groups{display:grid;gap:10px;padding:17px 19px 0}
+.am-organization-group{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center}
+.am-organization-group-content{display:flex;gap:10px;align-items:center;flex-wrap:wrap;min-width:0}
+.am-organization-group-label{min-width:112px;font-weight:800}
+.am-organization-group-items{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
+.am-organization-add{width:122px;max-width:100%;flex:none;white-space:nowrap;justify-self:end}
+.am-toolbar>.am-organization-add{margin-left:auto}
+@media(max-width:420px){.am-organization-group-content{align-items:flex-start;flex-direction:column}.am-organization-group-items>.ui-button{max-width:100%;overflow-wrap:anywhere;white-space:normal}}

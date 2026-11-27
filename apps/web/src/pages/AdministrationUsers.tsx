@@ -1,15 +1,17 @@
+import { lockBodyScroll } from '../components/body-scroll-lock';
+import { OrganizationFilters,useOrganizationFilter } from '../components/OrganizationFilters';
 import { useCallback, useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from 'react';
-import { ArrowLeftRight, Check, Copy, Plus, X } from 'lucide-react';
+import { ArrowLeftRight, Check, Copy, X } from 'lucide-react';
 import { Button, Input, SearchInput, Select, Textarea } from '../components/ui';
 import { useAuth } from '../auth/AuthGate';
 import { useToast } from '../components/toast';
 
 type Role = { id: string; key: string; name: string; protected: boolean };
-type Branch = { id: string; name: string };
+type Branch = { id: string; name: string; kind?:string };
 type Department = { id: string; name: string; branchId?: string };
 type Account = {
   id: string; name: string; email: string; role: Role; branch: Branch;
-  department: Department | null; active: boolean; pendingActivation: boolean;
+  department: Department | null; active: boolean; pendingActivation: boolean;loginEligible?:boolean;leadDepartmentIds?:string[];
   phone: string; lastActive: string | null;
 };
 type Lookups = { roles: Role[]; branches: Branch[]; departments: Department[] };
@@ -52,13 +54,12 @@ function Modal({ title, description, close, children, footer, drawer = false }: 
   footer: ReactNode; drawer?: boolean;
 }) {
   useEffect(() => {
-    const old = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    const unlock=lockBodyScroll();
     const handler = (event: globalThis.KeyboardEvent) => {
       if (event.key === 'Escape' && !document.querySelector('.ui-select-options')) close();
     };
     document.addEventListener('keydown', handler);
-    return () => { document.removeEventListener('keydown', handler); document.body.style.overflow = old; };
+    return () => { document.removeEventListener('keydown', handler); unlock(); };
   }, [close]);
   return <div className={'am-overlay ' + (drawer ? '' : 'am-center')} onMouseDown={close}>
     <section className={'am-modal ' + (drawer ? 'am-drawer' : 'am-form-modal')} role="dialog" aria-modal="true"
@@ -92,10 +93,11 @@ function Form({ user, lookups, close, saved }: {
   const isProtected = user?.role.protected ?? false;
   const branches = lookups.branches;
   const departments = lookups.departments.filter(d => d.branchId === form.branchId);
-  const roleOptions = lookups.roles.filter(r => !r.protected || user?.role.id === r.id);
+  const isStore=branches.find(b=>b.id===form.branchId)?.kind==='STORE';
+  const roleOptions = lookups.roles.filter(r => (!r.protected || user?.role.id === r.id)&&(!isStore||['EMPLOYEE','BRANCH_MANAGER'].includes(r.key)));
   const assignableRoles = isSelf || isProtected ? lookups.roles.filter(r => r.id === user?.role.id) : roleOptions;
   const change = (key: keyof FormValues, value: string | boolean) => {
-    setForm(old => ({ ...old, [key]: value, ...(key === 'branchId' ? { departmentId: '' } : {}) }));
+    setForm(old => ({ ...old, [key]: value, ...(key === 'branchId' ? { departmentId: '', ...(branches.find(b=>b.id===value)?.kind==='STORE'&&!lookups.roles.some(r=>r.id===old.roleId&&['EMPLOYEE','BRANCH_MANAGER'].includes(r.key))?{roleId:lookups.roles.find(r=>r.key==='EMPLOYEE')?.id??''}:{}) } : {}) }));
     setError('');
   };
   const selectedRole = lookups.roles.find(r => r.id === form.roleId);
@@ -106,7 +108,7 @@ function Form({ user, lookups, close, saved }: {
   function validate() {
     if (form.name.trim().split(/\s+/).length < 2) { setError('Enter first and last name.'); return; }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) { setError('Enter a valid work email.'); return; }
-    if (!selectedRole || !selectedBranch) { setError('Choose role and branch.'); return; }
+    if (!selectedRole || !selectedBranch || (isStore&&!['EMPLOYEE','BRANCH_MANAGER'].includes(selectedRole.key))) { setError('Choose role and branch.'); return; }
     setReview(true);
     setError('');
   }
@@ -188,9 +190,9 @@ function ResetDialog({ user, close, saved }: {
     } catch (err) { setError(err instanceof Error ? err.message : 'Unable to reset credentials.'); }
     finally { setPending(false); }
   }
-  return <Modal title="Reset employee password" description={user.name + ' · ' + user.email} close={close}
+  return <Modal title={user.pendingActivation?'Activate employee account':'Reset employee password'} description={user.name + ' · ' + user.email} close={close}
     footer={<><Button onClick={close}>Cancel</Button><span className="am-spacer"/>
-      <Button variant="primary" disabled={pending} onClick={() => void reset()}>{pending ? 'Processing...' : 'Issue reset link'}</Button></>}>
+      <Button variant="primary" disabled={pending} onClick={() => void reset()}>{pending ? 'Processing...' : user.pendingActivation?'Issue activation link':'Issue reset link'}</Button></>}>
     <div className="am-form-grid">
       <Field label="Employee"><Input readOnly value={user.name}/></Field>
       <Field label="Session policy"><Input readOnly value="Revoke all active sessions"/></Field>
@@ -209,14 +211,14 @@ function AccountDetails({ user, close, onEdit, onReset }: {
   const { user: me } = useAuth();
   return <Modal drawer title={user.name} description={'Employee account · ' + user.id} close={close}
     footer={<><Button onClick={close}>Close</Button><span className="am-spacer"/>
-      <Button onClick={onReset} disabled={!user.active || user.id === me.id}>Reset password</Button>
+      <Button onClick={onReset} disabled={!user.active || user.id === me.id || user.loginEligible===false}>{user.pendingActivation?'Set / activate password':'Reset password'}</Button>
       <Button variant="primary" onClick={onEdit}>Edit account</Button></>}>
     <div className="am-detail-pills"><Status user={user}/>
-      {user.role.protected && <span className="am-status protected">Protected</span>}</div>
+      {!!user.leadDepartmentIds?.length&&<span className="am-status active">Department Lead</span>}{user.role.protected && <span className="am-status protected">Protected</span>}</div>
     <div className="am-summary">
       {[
         ['Email', user.email], ['Role', user.role.name], ['Branch', user.branch.name],
-        ['Department', user.department?.name || '—'], ['Phone', user.phone || '—'],
+        ['Department', user.department?.name || '—'],['Login access',user.loginEligible?'Allowed':'Directory only'], ['Phone', user.phone || '—'],
         ['Last active', user.lastActive ? new Date(user.lastActive).toLocaleString() : 'Never']
       ].map(([label, value]) => <div className="am-display-field" key={label}><small>{label}</small><strong>{value}</strong></div>)}
     </div>
@@ -264,12 +266,13 @@ export default function AdministrationUsers({ openCreate, closeCreate, onSummary
   const [search, setSearch] = useState('');
   const [role, setRole] = useState('All roles');
   const [branch, setBranch] = useState('All branches');
+  const organizationFilter=useOrganizationFilter();
+  const [departmentFilter,setDepartmentFilter]=useState('All departments');
   const [status, setStatus] = useState('All statuses');
   const [selected, setSelected] = useState<Account | null>(null);
   const [editing, setEditing] = useState<Account | null>(null);
   const [resetting, setResetting] = useState<Account | null>(null);
   const [invite, setInvite] = useState<string | null>(null);
-  const [createInternal, setCreateInternal] = useState(false);
   const toast = useToast();
   const { user: me } = useAuth();
 
@@ -293,18 +296,17 @@ export default function AdministrationUsers({ openCreate, closeCreate, onSummary
     const state = !u.active ? 'Inactive' : u.pendingActivation ? 'Pending' : 'Active';
     return (!query || [u.name, u.email, u.role.name, u.branch.name, u.department?.name || ''].some(x => x.toLowerCase().includes(query)))
       && (role === 'All roles' || u.role.name === role)
-      && (branch === 'All branches' || u.branch.name === branch)
-      && (status === 'All statuses' || state === status);
-  }), [users, search, role, branch, status]);
+      && (branch === 'All branches' || u.branch.name === branch) && organizationFilter.matches(u.branch.id)
+      && (status === 'All statuses' || state === status) && (departmentFilter==='All departments'||u.department?.name===departmentFilter);
+  }), [users, search, role, branch, status,organizationFilter,departmentFilter]);
   function saved(activationPath: string | null) {
-    setEditing(null); setCreateInternal(false); closeCreate(); setSelected(null); setResetting(null);
+    setEditing(null); closeCreate(); setSelected(null); setResetting(null);
     if (activationPath) setInvite(activationPath);
     else toast.success('Account updated successfully.');
     void load();
   }
-  const isCreating = openCreate || createInternal;
-  const openNew = () => { setEditing(null); setCreateInternal(true); };
-  const closeNew = () => { setCreateInternal(false); closeCreate(); };
+  const isCreating = openCreate;
+  const closeNew = closeCreate;
   function onRowKey(e: KeyboardEvent<HTMLTableRowElement>, user: Account) {
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelected(user); }
   }
@@ -314,9 +316,7 @@ export default function AdministrationUsers({ openCreate, closeCreate, onSummary
         value={search} onChange={e => setSearch(e.target.value)}/>
       <Select className="am-filter" label="Filter role" options={['All roles', ...lookups.roles.map(r => r.name)]} value={role} onChange={setRole}/>
       <Select className="am-filter" label="Filter user status" options={['All statuses','Active','Inactive','Pending']} value={status} onChange={setStatus}/>
-      <Select className="am-filter" label="Filter branch" options={['All branches', ...lookups.branches.map(b => b.name)]} value={branch} onChange={setBranch}/>
-      <span className="am-spacer"/>
-      <Button variant="primary" icon={<Plus size={16}/>} onClick={openNew}>Add user</Button>
+      <OrganizationFilters filter={organizationFilter}/><Select label="Filter department" value={departmentFilter} options={['All departments',...new Set(users.filter(u=>organizationFilter.matches(u.branch.id)).flatMap(u=>u.department?[u.department.name]:[])),...(departmentFilter==='All departments'?[]:[departmentFilter])].filter((v,i,a)=>a.indexOf(v)===i)} onChange={setDepartmentFilter}/><Button onClick={()=>{setSearch('');setRole('All roles');setStatus('All statuses');setBranch('All branches');setDepartmentFilter('All departments');organizationFilter.reset();}}>Clear filters</Button>{!organizationFilter.branches.length&&<Select className="am-filter" label="Filter branch" options={['All branches', ...lookups.branches.map(b => b.name)]} value={branch} onChange={setBranch}/>}
     </div>
     {error && <div className="am-empty" role="alert">{error} <Button onClick={() => void load()}>Retry</Button></div>}
     {loading ? <div className="am-empty">Loading users from PostgreSQL...</div> : <>

@@ -24,13 +24,14 @@ export const PERMISSIONS = {
 
 export type PermissionKey = keyof typeof PERMISSIONS;
 
+export const BRANCH_MANAGER_PERMISSIONS: PermissionKey[] = ['assets.view', 'assignments.manage', 'transfers.manage', 'inventory.manage', 'maintenance.manage', 'approvals.request'];
 const all = Object.keys(PERMISSIONS) as PermissionKey[];
 const roleDefinitions: { key: string; name: string; description: string; permissions: PermissionKey[]; protected?: boolean }[] = [
   { key: 'SYSTEM_ADMIN', name: 'System Administrator', description: 'Protected system-wide administrator', permissions: all, protected: true },
   { key: 'COMPANY_ADMIN', name: 'Company Administrator', description: 'Company operations and user management', permissions: all.filter(p => !['finance.view', 'finance.edit', 'audit.view', 'security.view', 'roles.manage', 'settings.manage'].includes(p)) },
-  { key: 'BRANCH_MANAGER', name: 'Branch Manager', description: 'One assigned branch', permissions: ['assets.view', 'assignments.manage', 'transfers.manage', 'inventory.manage', 'maintenance.manage', 'approvals.request'] },
+  { key: 'BRANCH_MANAGER', name: 'Branch Manager', description: 'One assigned branch', permissions: BRANCH_MANAGER_PERMISSIONS },
   { key: 'ASSET_MANAGER', name: 'Asset Manager', description: 'Manage asset lifecycle operations', permissions: ['assets.view', 'assets.create', 'assets.edit', 'assignments.manage', 'transfers.manage', 'inventory.manage', 'maintenance.manage', 'licenses.manage', 'approvals.request', 'approvals.review'] },
-  { key: 'EMPLOYEE', name: 'Employee', description: 'Asset-custody directory record; no application login', permissions: [] },
+  { key: 'EMPLOYEE', name: 'Employee', description: 'Asset-custody directory record; active office department leads may sign in', permissions: [] },
   { key: 'AUDITOR', name: 'Auditor', description: 'Read permitted business and security records', permissions: ['assets.view', 'finance.view', 'audit.view', 'security.view', 'reports.export'] }
 ];
 

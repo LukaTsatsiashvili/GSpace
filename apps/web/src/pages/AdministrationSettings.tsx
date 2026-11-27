@@ -1,3 +1,4 @@
+import { lockBodyScroll } from '../components/body-scroll-lock';
 import { useEffect, useState } from 'react';
 import { Box, Check, X } from 'lucide-react';
 import { Badge, Button, Input } from '../components/ui';
@@ -65,8 +66,7 @@ const definitions: readonly SettingDefinition[] = [
 
 function useSettingsEscape(onClose:()=>void) {
   useEffect(()=>{
-    const previous=document.body.style.overflow;
-    document.body.style.overflow='hidden';
+    const unlock=lockBodyScroll();
     const handler=(event:KeyboardEvent)=>{
       if(event.key==='Escape'){
         event.preventDefault();
@@ -77,7 +77,7 @@ function useSettingsEscape(onClose:()=>void) {
     document.addEventListener('keydown',handler);
     return ()=>{
       document.removeEventListener('keydown',handler);
-      document.body.style.overflow=previous;
+      unlock();
     };
   },[onClose]);
 }

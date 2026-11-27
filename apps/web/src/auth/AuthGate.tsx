@@ -10,6 +10,7 @@ export type AuthUser = {
   role: { key: string; name: string; permissions: string[] };
   branch: { id: string; name: string };
   department: { id: string; name: string } | null;
+  leadDepartmentIds?: string[];
   mustChangePassword: boolean;
 };
 

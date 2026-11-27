@@ -10,8 +10,8 @@
 .ad-catalog .section-tab{padding:16px 13px;font-size:12px}
 .ad-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:17px 19px}
 .ad-toolbar .ad-search.ui-search{width:min(260px,100%)}
-.ad-toolbar .ad-range{width:130px;max-width:100%}
-.ad-toolbar .ad-filter{width:127px;max-width:100%}
+.ad-toolbar .ad-range{max-width:100%}
+.ad-toolbar .ad-filter{max-width:100%}
 .ad-toolbar-spacer{flex:1}
 .ad-table-scroll{overflow-x:auto;max-width:100%}
 .ad-table{width:100%;min-width:1050px;text-align:left;border-collapse:collapse;table-layout:auto}
@@ -125,7 +125,7 @@
 @media(max-width:750px){
  .ad-page .page-header{align-items:flex-start;flex-direction:column}
  .ad-toolbar .ad-search.ui-search{width:100%}
- .ad-toolbar .ad-range,.ad-toolbar .ad-filter{flex:1;min-width:130px}
+ 
  .ad-dialog-head{padding:19px 16px}
  .ad-dialog-body{padding:19px 16px}
  .ad-dialog-footer{padding:14px 16px}

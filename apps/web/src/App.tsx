@@ -3,6 +3,7 @@ import { Bell, Boxes, Menu, Moon, Sun, ArrowUpRight } from 'lucide-react';
 import { modules, moduleGroups, moduleFromHash } from './modules';
 import { Badge, Card, EmptyState, PageHeader, SectionTabs, SearchInput } from './components/ui';
 import OverviewPage from './pages/OverviewPage';
+import DepartmentLeadOverview from './pages/DepartmentLeadOverview';
 import ResourcesPage from './pages/ResourcesPage';
 import AssignmentsPage from './pages/AssignmentsPage';
 import ApprovalsPage from './pages/ApprovalsPage';
@@ -62,7 +63,7 @@ function AppShell() {
     try { localStorage.setItem('gspace-theme', next); } catch { /* storage may be disabled */ }
   }
 
-  return <div className={`app ${theme}`}>
+  return <div className={`app ${theme}${current.id==='administration'?' admin-scroll-shell':''}`}>
     {menuOpen && <button className="nav-scrim" aria-label="Close navigation" onClick={() => setMenuOpen(false)}/>}
     <aside className={`sidebar ${menuOpen ? 'opened' : ''}`} aria-label="Application sidebar">
       <div className="brand"><div className="brand-mark"><Boxes size={22}/></div><div><strong>GSpace</strong><small>ENTERPRISE HUB</small></div></div>
@@ -85,7 +86,7 @@ function AppShell() {
         <button type="button" className="profile profile-action" aria-label="Open my profile and security" title="My profile and security" onClick={() => setProfileOpen(true)}><div className="profile-avatar">{user.fullName.trim().split(/\s+/).slice(0,2).map(n=>n[0]).join('').toUpperCase()}</div><div className="profile-text"><strong>{user.fullName}</strong><small>{user.role.name}</small></div></button>
         <button className="icon-action" aria-label="Sign out" title="Sign out" onClick={() => { void signOut().catch(() => toast.error('Could not sign out. Please try again.')); }}><LogOut size={19}/></button>
       </div></header>
-      <main className="content">{current.id === 'overview' ? <OverviewPage navigate={navigate} firstName={user.fullName.trim().split(/\s+/)[0]}/> : current.id === 'resources' ? <ResourcesPage/> : current.id === 'assignments' ? <AssignmentsPage/> : current.id === 'approvals' ? <ApprovalsPage/> : current.id === 'transfers' ? <TransfersPage/> : current.id === 'inventory' ? <InventoryPage/> : current.id === 'licenses' ? <LicensesPage/> : current.id === 'maintenance' ? <MaintenancePage/> : current.id === 'finance' ? <FinancePage/> : current.id === 'reports' ? <ReportsPage/> : current.id === 'audit' ? <AuditPage/> : current.id === 'administration' ? <AdministrationPage/> : <>
+      <main className="content">{current.id === 'overview' ? (user.role.key==='EMPLOYEE'&&user.leadDepartmentIds?.length ? <DepartmentLeadOverview/> : <OverviewPage navigate={navigate} firstName={user.fullName.trim().split(/\s+/)[0]}/>) : current.id === 'resources' ? <ResourcesPage/> : current.id === 'assignments' ? <AssignmentsPage/> : current.id === 'approvals' ? <ApprovalsPage/> : current.id === 'transfers' ? <TransfersPage/> : current.id === 'inventory' ? <InventoryPage/> : current.id === 'licenses' ? <LicensesPage/> : current.id === 'maintenance' ? <MaintenancePage/> : current.id === 'finance' ? <FinancePage/> : current.id === 'reports' ? <ReportsPage/> : current.id === 'audit' ? <AuditPage/> : current.id === 'administration' ? <AdministrationPage/> : <>
         <PageHeader eyebrow={`${current.group} / RESOURCE MANAGEMENT`} title={current.label} description={current.description}/>
         <ModulePage key={current.id} label={current.label}/>
         <div className="preview-notice"><Badge tone="blue">Development build</Badge><span>Visual shell and sample metrics only. All business operations require future authenticated API integration.</span></div>

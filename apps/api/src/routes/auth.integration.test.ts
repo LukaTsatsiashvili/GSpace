@@ -100,6 +100,21 @@ test('session login, CSRF, RBAC directory read and logout', { skip: !process.env
     assert.equal(protectedEdit.status, 403);
 
 
+    // Store membership: both active and inactive accounts may have only the two retail roles.
+    const orgPost=(path:string,body:object)=>fetch(base+'/api/v1/admin/organization'+path,{method:'POST',headers:{cookie:both,'content-type':'application/json','x-csrf-token':csrf.csrfToken},body:JSON.stringify(body)});
+    const retailUnit=await orgPost('/groups/businessUnits',{name:'Integration Retail',active:true});
+    assert.equal(retailUnit.status,201);const retailUnitId=(await retailUnit.json() as {id:string}).id;
+    const retailBrand=await orgPost('/groups/brands',{name:'Integration Brand',active:true});
+    assert.equal(retailBrand.status,201);const retailBrandId=(await retailBrand.json() as {id:string}).id;
+    const retailStore=await orgPost('/branches',{name:'Integration Store',code:'INTEGRATION_STORE',city:'Tbilisi',managerId:null,active:true,kind:'STORE',businessUnitId:retailUnitId,brandId:retailBrandId});
+    assert.equal(retailStore.status,201);const retailStoreId=(await retailStore.json() as {id:string}).id;
+    const forbiddenStoreUser=await fetch(base+'/api/v1/admin/users',{method:'POST',headers:{cookie:both,'content-type':'application/json','x-csrf-token':csrf.csrfToken},body:JSON.stringify({name:'Invalid Store Account',email:'invalid-store@example.test',roleId:createdRole.id,branchId:retailStoreId,departmentId:null,active:false})});
+    assert.equal(forbiddenStoreUser.status,403);
+    const storeEmployeeRole=await db.role.findUniqueOrThrow({where:{key:'EMPLOYEE'}});
+    const storeEmployee=await fetch(base+'/api/v1/admin/users',{method:'POST',headers:{cookie:both,'content-type':'application/json','x-csrf-token':csrf.csrfToken},body:JSON.stringify({name:'Store Employee Test',email:'store-employee-test@example.test',roleId:storeEmployeeRole.id,branchId:retailStoreId,departmentId:null,active:true})});
+    assert.equal(storeEmployee.status,201);assert.equal((await storeEmployee.json() as {activationPath:string|null}).activationPath,null);
+    const orgDirectory=await fetch(base+'/api/v1/organization',{headers:{cookie:both}});
+    assert.equal(orgDirectory.status,200);assert.ok((await orgDirectory.json() as {branches:{id:string}[]}).branches.some(b=>b.id===retailStoreId));
     // Branch and department CRUD: actual database writes and cross-branch safeguards.
 
     // Resources: authenticated real CRUD, unique Asset IDs, documents, custom fields and bulk registration.
@@ -966,6 +981,116 @@ test('session login, CSRF, RBAC directory read and logout', { skip: !process.env
     await db.rolePermission.delete({ where: {
       roleId_permissionId: { roleId: scopedRole.id, permissionId: approvalReviewPermission.id }
     } });
+
+    // Same-brand, different physical stores: managers transfer and receive independently.
+    const storeTwo=await orgPost('/branches',{name:'Integration Store Two',code:'INTEGRATION_STORE_TWO',city:'Tbilisi',managerId:null,active:true,kind:'STORE',businessUnitId:retailUnitId,brandId:retailBrandId});
+    assert.equal(storeTwo.status,201);const storeTwoId=(await storeTwo.json() as {id:string}).id;
+    const storeManagerRole=await db.role.findUniqueOrThrow({where:{key:'BRANCH_MANAGER'}});
+    const storePassword='Store test password 2026';
+    const storeManagers=await Promise.all([retailStoreId,storeTwoId].map((branchId,index)=>db.user.create({data:{email:'integration-store-manager-'+index+'@example.test',fullName:'Integration Store Manager '+index,branchId,roleId:storeManagerRole.id,credential:{create:{passwordHash:'placeholder'}}}})));
+    const storePasswordHash=await hashPassword(storePassword);
+    for(const manager of storeManagers){await db.userCredential.update({where:{userId:manager.id},data:{passwordHash:storePasswordHash}});await db.branch.update({where:{id:manager.branchId},data:{managerId:manager.id}});}
+    async function storeSignIn(email:string){const r=await fetch(base+'/api/v1/auth/login',{method:'POST',headers:{cookie:csrfCookie!,'content-type':'application/json','x-csrf-token':csrf.csrfToken},body:JSON.stringify({email,password:storePassword})});assert.equal(r.status,200);const cookie=r.headers.get('set-cookie')?.split(';')[0];assert.ok(cookie);return csrfCookie+'; '+cookie;}
+    const sourceCookies=await storeSignIn(storeManagers[0].email),destinationCookies=await storeSignIn(storeManagers[1].email);
+    const transferAssets=await Promise.all([1,2].map(n=>db.resource.create({data:{assetCode:'TEST-TRANSFER-'+n,name:'Transfer test '+n,category:'Other',branchId:retailStoreId}})));
+    const transferWrite=(path:string,cookie:string,body:object)=>fetch(base+'/api/v1/transfers'+path,{method:'POST',headers:{cookie,'content-type':'application/json','x-csrf-token':csrf.csrfToken},body:JSON.stringify(body)});
+    const transferBody={sourceId:retailStoreId,destinationId:storeTwoId,recipientId:storeManagers[1].id,resourceIds:transferAssets.map(r=>r.id),route:'Manager approval',reason:'Integration test physical transfer'};
+    assert.equal((await transferWrite('/',sourceCookies,{...transferBody,destinationId:retailStoreId})).status,400);
+    assert.equal((await transferWrite('/',sourceCookies,{...transferBody,route:'Direct dispatch'})).status,403);
+    const createTransfer=await transferWrite('/',sourceCookies,transferBody);assert.equal(createTransfer.status,201);
+    const branchTransferId=(await createTransfer.json() as {id:string}).id;
+    assert.equal((await db.resource.findUniqueOrThrow({where:{id:transferAssets[0].id}})).status,'IN_TRANSFER');
+    assert.equal((await transferWrite('/',sourceCookies,transferBody)).status,409);
+    assert.equal((await transferWrite('/'+branchTransferId+'/action',sourceCookies,{action:'approve'})).status,403);
+    assert.equal((await transferWrite('/'+branchTransferId+'/action',both,{action:'approve'})).status,200);
+    assert.equal((await transferWrite('/'+branchTransferId+'/action',sourceCookies,{action:'dispatch'})).status,200);
+    assert.equal((await transferWrite('/'+branchTransferId+'/action',sourceCookies,{action:'cancel',notes:'invalid cancellation'})).status,403);
+    assert.equal((await transferWrite('/'+branchTransferId+'/action',destinationCookies,{action:'arrive'})).status,200);
+    const transferItems=await db.branchTransferItem.findMany({where:{transferId:branchTransferId},orderBy:{resourceId:'asc'}});
+    assert.equal((await transferWrite('/'+branchTransferId+'/receipt',sourceCookies,{decisions:[{itemId:transferItems[0].id,decision:'ACCEPT'}]})).status,403);
+    assert.equal((await transferWrite('/'+branchTransferId+'/receipt',destinationCookies,{decisions:[{itemId:transferItems[0].id,decision:'ACCEPT'}]})).status,200);
+    assert.equal((await db.branchTransfer.findUniqueOrThrow({where:{id:branchTransferId}})).status,'Partially received');
+    assert.equal((await db.resource.findUniqueOrThrow({where:{id:transferItems[0].resourceId}})).branchId,storeTwoId);
+    assert.equal((await db.resource.findUniqueOrThrow({where:{id:transferItems[1].resourceId}})).branchId,retailStoreId);
+    assert.equal((await transferWrite('/'+branchTransferId+'/receipt',destinationCookies,{decisions:[{itemId:transferItems[1].id,decision:'REPORT_ISSUE',damaged:true,notes:'Damage without evidence'}]})).status,400);
+    assert.equal((await transferWrite('/'+branchTransferId+'/receipt',destinationCookies,{decisions:[{itemId:transferItems[1].id,decision:'ACCEPT'}]})).status,200);
+    assert.equal((await db.branchTransfer.findUniqueOrThrow({where:{id:branchTransferId}})).status,'Completed');
+    assert.equal((await transferWrite('/export',both,{ids:[branchTransferId]})).status,200);
+
+    // Department Lead is an appointment, not an additional persisted role.
+    const leadTestRole=await db.role.findUniqueOrThrow({where:{key:'EMPLOYEE'}});
+    const leadTestPassword='Head office lead test 2026';
+    const leadTestUser=await db.user.create({data:{email:'department-lead-integration@example.test',fullName:'Department Lead Integration',roleId:leadTestRole.id,branchId:headOfficeRecord.id}});
+    const leadTestDepartmentResponse=await orgWrite('/departments','POST',{name:'Lead Auth Integration',branchId:headOfficeRecord.id,leadUserId:leadTestUser.id,active:true});
+    assert.equal(leadTestDepartmentResponse.status,201);
+    const leadTestDepartmentId=(await leadTestDepartmentResponse.json() as {id:string}).id;
+    await db.user.update({where:{id:leadTestUser.id},data:{departmentId:leadTestDepartmentId}});
+    const ownDeptEmployee=await db.user.create({data:{email:'lead-own-dept-employee@example.test',fullName:'Own Department Employee',roleId:leadTestRole.id,branchId:headOfficeRecord.id,departmentId:leadTestDepartmentId}});
+    const leadOtherEmployee=await db.user.create({data:{email:'lead-other-dept-employee@example.test',fullName:'Other Department Employee',roleId:leadTestRole.id,branchId:headOfficeRecord.id}});
+    const activationResponse=await fetch(base+'/api/v1/admin/users/'+leadTestUser.id+'/reset-password',{method:'POST',headers:{cookie:both,'content-type':'application/json','x-csrf-token':csrf.csrfToken},body:JSON.stringify({reason:'Activate appointed department lead'})});
+    assert.equal(activationResponse.status,200);
+    const leadActivation=(await activationResponse.json() as {activationPath:string}).activationPath;
+    const leadToken=decodeURIComponent(leadActivation.split('#activate=')[1]);
+    const activateLead=await fetch(base+'/api/v1/auth/activate',{method:'POST',headers:{cookie:csrfCookie!,'content-type':'application/json','x-csrf-token':csrf.csrfToken},body:JSON.stringify({token:leadToken,password:leadTestPassword})});
+    assert.equal(activateLead.status,204);
+    const loginLead=()=>fetch(base+'/api/v1/auth/login',{method:'POST',headers:{cookie:csrfCookie!,'content-type':'application/json','x-csrf-token':csrf.csrfToken},body:JSON.stringify({email:leadTestUser.email,password:leadTestPassword})});
+    const leadLoginResponse=await loginLead();assert.equal(leadLoginResponse.status,200);
+    const leadLoginBody=await leadLoginResponse.json() as {user:{role:{key:string;permissions:string[]};leadDepartmentIds:string[]}};
+    assert.equal(leadLoginBody.user.role.key,'EMPLOYEE');
+    assert.deepEqual(leadLoginBody.user.role.permissions,['assets.view','assignments.manage','transfers.manage','inventory.manage','maintenance.manage','approvals.request']);
+    assert.deepEqual(leadLoginBody.user.leadDepartmentIds,[leadTestDepartmentId]);
+    const leadSession=leadLoginResponse.headers.get('set-cookie')?.split(';')[0];assert.ok(leadSession);
+    const leadCookies=csrfCookie+'; '+leadSession;
+    assert.equal((await fetch(base+'/api/v1/admin/users',{headers:{cookie:leadCookies}})).status,403);
+    const ownDeptAsset=await db.resource.create({data:{assetCode:'LEAD-SCOPE-OWN',name:'Lead own asset',category:'Other',branchId:headOfficeRecord.id,departmentId:leadTestDepartmentId}});
+    const otherDeptAsset=await db.resource.create({data:{assetCode:'LEAD-SCOPE-UNALLOCATED',name:'Unallocated asset',category:'Other',branchId:headOfficeRecord.id}});
+    const leadResources=await fetch(base+'/api/v1/resources/',{headers:{cookie:leadCookies}});
+    assert.equal(leadResources.status,200);
+    const leadResourceRows=(await leadResources.json() as {resources:{id:string}[]}).resources;
+    assert.ok(leadResourceRows.some(r=>r.id===ownDeptAsset.id));assert.ok(!leadResourceRows.some(r=>r.id===otherDeptAsset.id));
+    assert.equal((await fetch(base+'/api/v1/resources/'+otherDeptAsset.id,{headers:{cookie:leadCookies}})).status,404);
+    const leadAssignmentLookups=await fetch(base+'/api/v1/assignments/lookups',{headers:{cookie:leadCookies}});
+    assert.equal(leadAssignmentLookups.status,200);
+    const leadLookups=(await leadAssignmentLookups.json() as {recipients:{id:string}[];availableAssets:{id:string}[];canManage:boolean});
+    assert.equal(leadLookups.canManage,true);assert.ok(leadLookups.recipients.some(m=>m.id===ownDeptEmployee.id));assert.ok(!leadLookups.recipients.some(m=>m.id===leadOtherEmployee.id));assert.ok(!leadLookups.availableAssets.some(m=>m.id===otherDeptAsset.id));
+    const leadIssue={recipientId:ownDeptEmployee.id,resourceIds:[ownDeptAsset.id],notes:'Department handover'};
+    assert.equal((await assignmentWrite('/',leadCookies,{...leadIssue,recipientId:leadOtherEmployee.id})).status,400);
+    assert.equal((await assignmentWrite('/',leadCookies,{...leadIssue,resourceIds:[otherDeptAsset.id]})).status,400);
+    const leadAssignmentResponse=await assignmentWrite('/',leadCookies,leadIssue);assert.equal(leadAssignmentResponse.status,201);
+    const leadAssignmentId=(await leadAssignmentResponse.json() as {id:string}).id;
+    const leadItem=await db.assignmentItem.findFirstOrThrow({where:{assignmentId:leadAssignmentId}});
+    assert.equal((await assignmentWrite('/'+leadAssignmentId+'/receipt',leadCookies,{onBehalfOf:true,decisions:[{itemId:leadItem.id,decision:'ACCEPT',notes:'Physical handover confirmed'}]})).status,200);
+    assert.equal((await assignmentWrite('/'+leadAssignmentId+'/returns/request',leadCookies,{itemIds:[leadItem.id]})).status,200);
+    assert.equal((await assignmentWrite('/'+leadAssignmentId+'/returns/verify',leadCookies,{items:[{itemId:leadItem.id,condition:'Good'}]})).status,200);
+    assert.equal((await db.resource.findUniqueOrThrow({where:{id:ownDeptAsset.id}})).departmentId,leadTestDepartmentId);
+    // Explicitly classify the test office before enabling physical transfers.
+    await db.branch.update({where:{id:headOfficeRecord.id},data:{kind:'OFFICE',businessUnitId:retailUnitId}});
+    const leadTransferBody={sourceId:headOfficeRecord.id,sourceDepartmentId:leadTestDepartmentId,destinationId:storeTwoId,recipientId:storeManagers[1].id,resourceIds:[ownDeptAsset.id],route:'Manager approval',reason:'Department to retail transfer'};
+    assert.equal((await transferWrite('/',leadCookies,{...leadTransferBody,sourceDepartmentId:null,resourceIds:[otherDeptAsset.id]})).status,403);
+    const leadTransferResponse=await transferWrite('/',leadCookies,leadTransferBody);assert.equal(leadTransferResponse.status,201);
+    const leadTransferId=(await leadTransferResponse.json() as {id:string}).id;
+    assert.equal((await transferWrite('/'+leadTransferId+'/action',both,{action:'approve'})).status,200);
+    assert.equal((await transferWrite('/'+leadTransferId+'/action',leadCookies,{action:'dispatch'})).status,200);
+    assert.equal((await transferWrite('/'+leadTransferId+'/action',destinationCookies,{action:'arrive'})).status,200);
+    const leadTransferItem=await db.branchTransferItem.findFirstOrThrow({where:{transferId:leadTransferId}});
+    assert.equal((await transferWrite('/'+leadTransferId+'/receipt',destinationCookies,{decisions:[{itemId:leadTransferItem.id,decision:'ACCEPT'}]})).status,200);
+    assert.equal((await db.resource.findUniqueOrThrow({where:{id:ownDeptAsset.id}})).departmentId,null);
+    const teamResponse=await fetch(base+'/api/v1/department-lead',{headers:{cookie:leadCookies}});
+    assert.equal(teamResponse.status,200);
+    const teamData=await teamResponse.json() as {members:{id:string}[]};
+    assert.ok(teamData.members.some(m=>m.id===ownDeptEmployee.id));assert.ok(!teamData.members.some(m=>m.id===leadOtherEmployee.id));
+    const leadApprovalLookups=await fetch(base+'/api/v1/approvals/lookups',{headers:{cookie:leadCookies}});
+    assert.equal(leadApprovalLookups.status,200);
+    const leadApprovalEmployees=(await leadApprovalLookups.json() as {employees:{id:string}[]}).employees;
+    assert.ok(leadApprovalEmployees.some(m=>m.id===ownDeptEmployee.id));assert.ok(!leadApprovalEmployees.some(m=>m.id===leadOtherEmployee.id));
+    assert.equal((await approvalWrite('/',leadCookies,{...makeApproval,beneficiaryId:leadOtherEmployee.id})).status,400);
+    assert.equal((await approvalWrite('/',leadCookies,{...makeApproval,beneficiaryId:ownDeptEmployee.id})).status,201);
+    const removeLead=await orgWrite('/departments/'+leadTestDepartmentId,'PATCH',{name:'Lead Auth Integration',branchId:headOfficeRecord.id,leadUserId:null,active:true});
+    assert.equal(removeLead.status,200);
+    assert.equal((await fetch(base+'/api/v1/auth/me',{headers:{cookie:leadCookies}})).status,401);
+    assert.equal((await loginLead()).status,401);
+    assert.equal((await db.userCredential.findUniqueOrThrow({where:{userId:leadTestUser.id}})).loginDisabled,true);
+    assert.equal(await db.session.count({where:{userId:leadTestUser.id,revokedAt:null}}),0);
 
     const logout = await fetch(base + '/api/v1/auth/logout', {
       method: 'POST', headers: { cookie: both, 'content-type': 'application/json', 'x-csrf-token': csrf.csrfToken }, body: '{}'
