@@ -20,7 +20,7 @@ export function useOrganizationFilter(){
 }
 export function OrganizationFilters({filter,withBranch=true}:{filter:ReturnType<typeof useOrganizationFilter>;withBranch?:boolean}){
  if(!filter.branches.length)return null;
- return <>{filter.units.length>2&&<Select label="Filter business unit" value={filter.unit==='All'?'All business units':filter.unit} options={filter.units.map(x=>x==='All'?'All business units':x)} onChange={v=>filter.setUnit(v==='All business units'?'All':v)}/>}
- {filter.brands.length>2&&<Select label="Filter brand" value={filter.brand==='All'?'All brands':filter.brand} options={filter.brands.map(x=>x==='All'?'All brands':x)} onChange={v=>filter.setBrand(v==='All brands'?'All':v)}/>}
+ return <>{filter.units.length>1&&<Select label="Filter business unit" value={filter.unit==='All'?'All business units':filter.unit} options={filter.units.map(x=>x==='All'?'All business units':x)} onChange={v=>filter.setUnit(v==='All business units'?'All':v)}/>}
+ {filter.brands.length>1&&<Select label="Filter brand" value={filter.brand==='All'?'All brands':filter.brand} options={filter.brands.map(x=>x==='All'?'All brands':x)} onChange={v=>filter.setBrand(v==='All brands'?'All':v)}/>}
  {withBranch&&<Select label="Filter branch" value={filter.branch==='All'?'All branches':filter.branch} options={filter.branchOptions.map(x=>x==='All'?'All branches':x)} onChange={v=>filter.setBranch(v==='All branches'?'All':v)}/>}</>;
 }

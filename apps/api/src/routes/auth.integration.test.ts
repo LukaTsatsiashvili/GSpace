@@ -982,6 +982,41 @@ test('session login, CSRF, RBAC directory read and logout', { skip: !process.env
       roleId_permissionId: { roleId: scopedRole.id, permissionId: approvalReviewPermission.id }
     } });
 
+    // Same-brand, different physical stores: managers transfer and receive independently.
+    const storeTwo=await orgPost('/branches',{name:'Integration Store Two',code:'INTEGRATION_STORE_TWO',city:'Tbilisi',managerId:null,active:true,kind:'STORE',businessUnitId:retailUnitId,brandId:retailBrandId});
+    assert.equal(storeTwo.status,201);const storeTwoId=(await storeTwo.json() as {id:string}).id;
+    const storeManagerRole=await db.role.findUniqueOrThrow({where:{key:'BRANCH_MANAGER'}});
+    const storePassword='Store test password 2026';
+    const storeManagers=await Promise.all([retailStoreId,storeTwoId].map((branchId,index)=>db.user.create({data:{email:'integration-store-manager-'+index+'@example.test',fullName:'Integration Store Manager '+index,branchId,roleId:storeManagerRole.id,credential:{create:{passwordHash:'placeholder'}}}})));
+    const storePasswordHash=await hashPassword(storePassword);
+    for(const manager of storeManagers){await db.userCredential.update({where:{userId:manager.id},data:{passwordHash:storePasswordHash}});await db.branch.update({where:{id:manager.branchId},data:{managerId:manager.id}});}
+    async function storeSignIn(email:string){const r=await fetch(base+'/api/v1/auth/login',{method:'POST',headers:{cookie:csrfCookie,'content-type':'application/json','x-csrf-token':csrf.csrfToken},body:JSON.stringify({email,password:storePassword})});assert.equal(r.status,200);const cookie=r.headers.get('set-cookie')?.split(';')[0];assert.ok(cookie);return csrfCookie+'; '+cookie;}
+    const sourceCookies=await storeSignIn(storeManagers[0].email),destinationCookies=await storeSignIn(storeManagers[1].email);
+    const transferAssets=await Promise.all([1,2].map(n=>db.resource.create({data:{assetCode:'TEST-TRANSFER-'+n,name:'Transfer test '+n,category:'Other',branchId:retailStoreId}})));
+    const transferWrite=(path:string,cookie:string,body:object)=>fetch(base+'/api/v1/transfers'+path,{method:'POST',headers:{cookie,'content-type':'application/json','x-csrf-token':csrf.csrfToken},body:JSON.stringify(body)});
+    const transferBody={sourceId:retailStoreId,destinationId:storeTwoId,recipientId:storeManagers[1].id,resourceIds:transferAssets.map(r=>r.id),route:'Manager approval',reason:'Integration test physical transfer'};
+    assert.equal((await transferWrite('/',sourceCookies,{...transferBody,destinationId:retailStoreId})).status,400);
+    assert.equal((await transferWrite('/',sourceCookies,{...transferBody,route:'Direct dispatch'})).status,403);
+    const createTransfer=await transferWrite('/',sourceCookies,transferBody);assert.equal(createTransfer.status,201);
+    const transferId=(await createTransfer.json() as {id:string}).id;
+    assert.equal((await db.resource.findUniqueOrThrow({where:{id:transferAssets[0].id}})).status,'IN_TRANSFER');
+    assert.equal((await transferWrite('/',sourceCookies,transferBody)).status,409);
+    assert.equal((await transferWrite('/'+transferId+'/action',sourceCookies,{action:'approve'})).status,403);
+    assert.equal((await transferWrite('/'+transferId+'/action',both,{action:'approve'})).status,200);
+    assert.equal((await transferWrite('/'+transferId+'/action',sourceCookies,{action:'dispatch'})).status,200);
+    assert.equal((await transferWrite('/'+transferId+'/action',sourceCookies,{action:'cancel',notes:'invalid cancellation'})).status,403);
+    assert.equal((await transferWrite('/'+transferId+'/action',destinationCookies,{action:'arrive'})).status,200);
+    const transferItems=await db.branchTransferItem.findMany({where:{transferId},orderBy:{resourceId:'asc'}});
+    assert.equal((await transferWrite('/'+transferId+'/receipt',sourceCookies,{decisions:[{itemId:transferItems[0].id,decision:'ACCEPT'}]})).status,403);
+    assert.equal((await transferWrite('/'+transferId+'/receipt',destinationCookies,{decisions:[{itemId:transferItems[0].id,decision:'ACCEPT'}]})).status,200);
+    assert.equal((await db.branchTransfer.findUniqueOrThrow({where:{id:transferId}})).status,'Partially received');
+    assert.equal((await db.resource.findUniqueOrThrow({where:{id:transferItems[0].resourceId}})).branchId,storeTwoId);
+    assert.equal((await db.resource.findUniqueOrThrow({where:{id:transferItems[1].resourceId}})).branchId,retailStoreId);
+    assert.equal((await transferWrite('/'+transferId+'/receipt',destinationCookies,{decisions:[{itemId:transferItems[1].id,decision:'REPORT_ISSUE',damaged:true,notes:'Damage without evidence'}]})).status,400);
+    assert.equal((await transferWrite('/'+transferId+'/receipt',destinationCookies,{decisions:[{itemId:transferItems[1].id,decision:'ACCEPT'}]})).status,200);
+    assert.equal((await db.branchTransfer.findUniqueOrThrow({where:{id:transferId}})).status,'Completed');
+    assert.equal((await transferWrite('/export',both,{ids:[transferId]})).status,200);
+
     const logout = await fetch(base + '/api/v1/auth/logout', {
       method: 'POST', headers: { cookie: both, 'content-type': 'application/json', 'x-csrf-token': csrf.csrfToken }, body: '{}'
     });
