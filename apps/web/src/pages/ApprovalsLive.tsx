@@ -9,8 +9,8 @@ import { approvalsApi, exportApprovalCsv,
 import './approvals.css';
 import './approvals-live.css';
 
-type Tab = 'My approvals' | 'All requests' | 'Request types';
-const tabs: Tab[] = ['My approvals', 'All requests', 'Request types'];
+type Tab = 'My requests / reviews' | 'All requests' | 'Request types';
+const tabs: Tab[] = ['My requests / reviews', 'All requests', 'Request types'];
 const statuses = ['All statuses', 'PENDING', 'CHANGES_REQUESTED', 'APPROVED', 'REJECTED', 'CANCELLED'];
 const fieldTypes: ApprovalField['type'][] = ['text','number','date','select','multi_select'];
 function nice(value: string) { return value.replace(/_/g, ' ').toLowerCase().replace(/^\w/, c => c.toUpperCase()); }
@@ -18,7 +18,7 @@ function showDate(value?: string | null) { return value ? new Date(value).toLoca
 function money(value: string | null) { return value === null ? '—' : '₾ ' + Number(value).toLocaleString(); }
 function message(error: unknown) { return error instanceof Error ? error.message : 'Operation failed'; }
 function emptyType(): ApprovalTypeInput {
-  return { code: '', name: '', description: '', active: true, deadlineDays: 3, fields: [],
+  return { code: '', name: '', description: '', active: true, deadlineDays: 3, beneficiaryRequired: false, fields: [],
     steps: [{ mode: 'ANY', targets: [] }] };
 }
 function Modal({ title, description, children, close, footer, wide = false }: {
@@ -55,17 +55,22 @@ function RequestForm({ types, lookups, close, saved, previous }: {
   const [branchId, setBranchId] = useState(previous?.branchId ?? lookups.branches[0]?.id ?? '');
   const [title, setTitle] = useState(previous?.title ?? '');
   const [reason, setReason] = useState(previous?.reason ?? '');
+  const [beneficiaryId, setBeneficiaryId] = useState<string | null>(previous?.beneficiaryId ?? null);
+  const employees = lookups.employees.filter(person => person.branchId === branchId);
   const [amount, setAmount] = useState(previous?.amount ?? '');
   const [values, setValues] = useState<Record<string, string | string[]>>(previous?.values ?? {});
   const [busy, setBusy] = useState(false);
   async function save() {
     if (!type || !branchId || !title.trim() || !reason.trim()) { toast.error('Complete request type, branch, title and justification.'); return; }
+    if ((previous?.beneficiaryRequired ?? type.beneficiaryRequired) && !beneficiaryId) {
+      toast.error('Select the employee who will receive the requested asset.'); return;
+    }
     setBusy(true);
     try {
-      if (previous) await approvalsApi.resubmit(previous.id, reason, values);
+      if (previous) await approvalsApi.resubmit(previous.id, reason, values, beneficiaryId);
       else {
         const body: ApprovalSubmission = {
-          typeId, branchId, title: title.trim(), reason: reason.trim(),
+          typeId, branchId, beneficiaryId, title: title.trim(), reason: reason.trim(),
           amount: amount.trim() === '' ? null : Number(amount), values
         };
         if (body.amount !== null && (!Number.isFinite(body.amount) || body.amount < 0)) throw Error('Enter a valid amount.');
@@ -81,9 +86,13 @@ function RequestForm({ types, lookups, close, saved, previous }: {
     footer={<><Button onClick={close}>Cancel</Button><Button variant="primary" disabled={busy || !type} onClick={() => void save()}>{busy ? 'Saving...' : previous ? 'Resubmit request' : 'Submit request'}</Button></>}>
     <div className="ap-form-grid">
       <FieldRow label="Request type *"><Select label="Request type" value={type?.name ?? 'Choose type'} options={types.filter(t => t.active).map(t => t.name)}
-        onChange={value => { const selected = types.find(t => t.name === value); setTypeId(selected?.id ?? ''); setValues({}); }}/></FieldRow>
+        onChange={value => { const selected = types.find(t => t.name === value); setTypeId(selected?.id ?? ''); setValues({}); setBeneficiaryId(null); }}/></FieldRow>
       <FieldRow label="Branch *"><Select label="Branch" value={lookups.branches.find(b => b.id === branchId)?.name ?? 'Choose branch'}
-        options={lookups.branches.map(b => b.name)} onChange={value => setBranchId(lookups.branches.find(b => b.name === value)?.id ?? '')}/></FieldRow>
+        options={lookups.branches.map(b => b.name)} onChange={value => { setBranchId(lookups.branches.find(b => b.name === value)?.id ?? ''); setBeneficiaryId(null); }}/></FieldRow>
+      <FieldRow label={'Requested for employee' + ((previous?.beneficiaryRequired ?? type?.beneficiaryRequired) ? ' *' : ' (optional)')}>
+        <Select label="Requested for employee" value={employees.find(person => person.id === beneficiaryId)?.fullName ?? 'No employee selected'}
+          options={['No employee selected', ...employees.map(person => person.fullName + ' (' + person.id.slice(0, 6) + ')')]}
+          onChange={value => { const person = employees.find(p => p.fullName + ' (' + p.id.slice(0, 6) + ')' === value); setBeneficiaryId(person?.id ?? null); }}/></FieldRow>
       <FieldRow label="Request title *"><Input value={title} disabled={!!previous} maxLength={180} onChange={e => setTitle(e.target.value)}/></FieldRow>
       <FieldRow label="Estimated amount (GEL)"><NumberInput min={0} step={0.01} value={amount} disabled={!!previous}
         onChange={e => setAmount(e.target.value)}/></FieldRow>
@@ -115,7 +124,7 @@ function TypeForm({ initial, lookups, close, saved }: {
   const toast = useToast();
   const [data, setData] = useState<ApprovalTypeInput>(() => initial ?
     { code: initial.code, name: initial.name, description: initial.description, active: initial.active,
-      deadlineDays: initial.deadlineDays, fields: initial.fields, steps: initial.steps } : emptyType());
+      deadlineDays: initial.deadlineDays, beneficiaryRequired: initial.beneficiaryRequired, fields: initial.fields, steps: initial.steps } : emptyType());
   const [busy, setBusy] = useState(false);
   const choices = useMemo(() => [
     ...lookups.roles.map(r => ({ key: 'ROLE:' + r.id, title: 'Role · ' + r.name })),
@@ -162,6 +171,8 @@ function TypeForm({ initial, lookups, close, saved }: {
         onChange={e => setData(old => ({ ...old, description: e.target.value }))}/></FieldRow></div>
       <FieldRow label="Deadline (calendar days)"><NumberInput min={1} max={90} step={1} value={data.deadlineDays}
         onChange={e => setData(old => ({ ...old, deadlineDays: Number(e.target.value) }))}/></FieldRow>
+      <label className="ap-live-option ap-live-toggle"><Checkbox checked={data.beneficiaryRequired}
+        onChange={e => setData(old => ({ ...old, beneficiaryRequired: e.target.checked }))}/>Require requested-for employee</label>
       <label className="ap-live-option ap-live-toggle"><Checkbox checked={data.active}
         onChange={e => setData(old => ({ ...old, active: e.target.checked }))}/> Active request type</label>
     </div>
@@ -241,6 +252,7 @@ function RequestDetails({ item, close, refresh }: { item: ApprovalRequestRecord;
     </>}>
     <div className="ap-live-summary"><div><span>Status</span><strong>{nice(item.status)}</strong></div>
       <div><span>Requester</span><strong>{item.requester}</strong></div>
+      <div><span>Requested for</span><strong>{item.beneficiary ?? 'Branch / store'}</strong></div>
       <div><span>Branch</span><strong>{item.branch}</strong></div>
       <div><span>Amount</span><strong>{money(item.amount)}</strong></div>
       <div><span>Submitted</span><strong>{showDate(item.createdAt)}</strong></div>
@@ -269,15 +281,18 @@ function RequestDetails({ item, close, refresh }: { item: ApprovalRequestRecord;
         {e.comment && <p>{e.comment}</p>}</div>)}</div>
   </Modal>
   {resubmitOpen && <RequestForm previous={item} types={[{ id:item.typeId, code:item.typeCode, name:item.type,
-      description:'',active:true,version:item.version,fields:item.fields,steps:item.steps,deadlineDays:3 }]}
-      lookups={{ branches:[{id:item.branchId,name:item.branch}], users:[], roles:[],canConfigure:false,canExport:false }}
+      description:'',active:true,version:item.version,beneficiaryRequired:item.beneficiaryRequired,
+      fields:item.fields,steps:item.steps,deadlineDays:3 }]}
+      lookups={{ branches:[{id:item.branchId,name:item.branch}], employees: item.beneficiaryId ? [
+        { id: item.beneficiaryId, fullName: item.beneficiary ?? 'Employee', branchId: item.branchId }
+      ] : [], users:[], roles:[],canConfigure:false,canExport:false }}
       close={() => setResubmitOpen(false)} saved={async () => { close(); await refresh(); }}/>}
   </>;
 }
 export default function ApprovalsLive() {
   const toast = useToast();
   const { user } = useAuth();
-  const [tab,setTab] = useState<Tab>('My approvals');
+  const [tab,setTab] = useState<Tab>('My requests / reviews');
   const [search,setSearch] = useState('');
   const [status,setStatus] = useState('All statuses');
   const [typeFilter,setTypeFilter] = useState('All types');
@@ -304,7 +319,7 @@ export default function ApprovalsLive() {
   },[]);
   useEffect(() => { void reload(); }, [reload]);
   const visible = useMemo(() => requests.filter(r => {
-    const withinTab = tab !== 'My approvals' || r.reviews.some(v => v.reviewerId === user.id);
+    const withinTab = tab !== 'My requests / reviews' || r.requesterId === user.id || r.reviews.some(v => v.reviewerId === user.id);
     const term = search.trim().toLowerCase();
     return withinTab && (!term || [r.code,r.title,r.requester,r.branch,r.type].some(v => v.toLowerCase().includes(term))) &&
       (status === 'All statuses' || r.status === status) && (typeFilter === 'All types' || r.type === typeFilter);
@@ -323,7 +338,7 @@ export default function ApprovalsLive() {
   return <div className="ap-page">
     <PageHeader eyebrow="WORKSPACE / APPROVAL WORKFLOWS" title="Requests & Approvals"
       badgeLabel="Connected to PostgreSQL"
-      description="Request resources, review assigned decisions and track versioned approval workflows."
+      description="Store managers request resources for their branch or employees; back-office reviewers decide."
       actions={<>{lookups?.canExport && <Button disabled={exporting || !visible.length}
         icon={<ArrowDownToLine size={16}/>} onClick={() => void exportCsv()}>{exporting ? 'Exporting...' : 'Export CSV'}</Button>}
         {user.role.permissions.includes('approvals.request') && <Button variant="primary" icon={<Plus size={17}/>}
@@ -336,7 +351,7 @@ export default function ApprovalsLive() {
       <Card className="ap-stat"><div><span>Changes requested</span><i className="ap-stat-icon purple"><Filter size={19}/></i></div><strong>{changes}</strong><small>Awaiting resubmission</small></Card>
     </div>
     <Card className="ap-catalog">
-      <SectionTabs tabs={tabs} selected={tab} counts={{'My approvals':mine}}
+      <SectionTabs tabs={tabs} selected={tab} counts={{'My requests / reviews':mine}}
         onChange={value => {setTab(value as Tab); setSearch('');setStatus('All statuses');setTypeFilter('All types');}}/>
       {tab === 'Request types' ? <div className="ap-types-content"><div className="ap-types-heading">
         <div><h2>Configurable request types</h2><p>New versions do not modify existing requests.</p></div>
@@ -345,7 +360,7 @@ export default function ApprovalsLive() {
           onClick={() => lookups?.canConfigure ? setTypeEditor(t) : undefined}>
           <span className="ap-type-icon"><ClipboardList size={20}/></span>
           <span className="ap-type-copy"><strong>{t.name}</strong><span>{t.description}</span>
-            <small>{t.code} · Version {t.version} · {t.steps.length} approval levels</small></span>
+            <small>{t.code} · Version {t.version} · {t.steps.length} approval levels · {t.beneficiaryRequired ? 'Employee required' : 'Employee optional'}</small></span>
           <Badge tone={t.active ? 'green':'neutral'}>{t.active ? 'Active':'Inactive'}</Badge>
           <ArrowLeftRight size={18}/></button>)}
           {!types.length && <div className="ap-no-results">No request types configured.</div>}</div>
@@ -364,7 +379,7 @@ export default function ApprovalsLive() {
             onClick={() => setDetails(r)} onKeyDown={e => {if (e.key === 'Enter' || e.key === ' ') {e.preventDefault();setDetails(r);}}}>
             <td><strong>{r.title}</strong><small>{r.code} · {money(r.amount)}</small></td>
             <td><div className="ap-person-cell"><span className="ap-live-avatar">{r.requester.trim().split(' ').map(p => p[0]).slice(0,2).join('')}</span>
-              <span><strong>{r.requester}</strong><small>{r.branch}</small></span></div></td>
+              <span><strong>{r.requester}</strong><small>{r.branch}{r.beneficiary ? ' · For ' + r.beneficiary : ''}</small></span></div></td>
             <td className="ap-muted-td">{r.type}</td>
             <td><strong>{showDate(r.createdAt)}</strong><small>Due {showDate(r.dueAt)}</small></td>
             <td><strong>Step {Math.min(r.currentStep+1,r.totalSteps)} of {r.totalSteps}</strong>
