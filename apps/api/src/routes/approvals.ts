@@ -165,7 +165,7 @@ async function validateBeneficiary(tx: Prisma.TransactionClient, id: string | nu
 }
 const include = {
   type: { select: { id: true, name: true, code: true } },
-  version: { select: { version: true, fields: true, steps: true, deadlineDays: true } },
+  version: { select: { version: true, fields: true, steps: true, deadlineDays: true, beneficiaryRequired: true } },
   branch: { select: { id: true, name: true } },
   requester: { select: { id: true, fullName: true } },
   beneficiary: { select: { id: true, fullName: true } },
