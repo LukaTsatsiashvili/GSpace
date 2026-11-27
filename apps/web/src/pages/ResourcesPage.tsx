@@ -14,7 +14,7 @@ import BulkResourceDialog from './BulkResourceDialog';
 import ResourceCategoriesDialog from './ResourceCategoriesDialog';
 import {
   resourceApi, exportResourceCsv, type ResourceRecord, type ResourceStatus,
-  type ResourceSummary, type Category, type Branch, type AuditEntry
+  type ResourceSummary, type Category, type Branch, type ResourceDepartment, type AuditEntry
 } from './resource-api';
 import './resources.css';
 
@@ -152,7 +152,7 @@ function ResourceDrawer({ resource, categories, close, canEdit, canDelete, onEdi
               {detail('Category', resource.category)}
               {detail('Resource type', resource.resourceType)}
               {detail('Condition', resource.condition)}
-              {detail('Branch', resource.branch)}
+              {detail('Branch', resource.branch)}{detail('Department',resource.department??'Unallocated')}
               {resource.assignedTo && detail('Assigned to', <div className="rs-assignee-cell">
                 <strong>{resource.assignedTo.userName}</strong>
                 <small>{receiptLabel(resource.assignedTo.itemStatus)}</small>
@@ -242,6 +242,7 @@ export default function ResourcesPage() {
   const [summary, setSummary] = useState<ResourceSummary>({ total: 0, assigned: 0, available: 0, maintenance: 0, branches: 0 });
   const [categories, setCategories] = useState<Category[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
+  const [departments,setDepartments]=useState<ResourceDepartment[]>([]);
   const [truncated, setTruncated] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -262,7 +263,7 @@ export default function ResourcesPage() {
     try {
       const [list, catalog] = await Promise.all([resourceApi.list(), resourceApi.catalog()]);
       setResources(list.resources); setSummary(list.summary); setTruncated(list.truncated);
-      setCategories(catalog.categories); setBranches(catalog.branches);
+      setCategories(catalog.categories); setBranches(catalog.branches);setDepartments(catalog.departments??[]);
     } catch (err) { setError(err instanceof Error ? err.message : 'Unable to load Resources.'); }
     finally { setLoading(false); }
   }, []);
@@ -381,7 +382,7 @@ export default function ResourcesPage() {
         setResources(records => records.map(record => record.id === updated.id ? updated : record));
       }}/>}
     {(adding || editing) && <NewResourceDialog key={editing?.id ?? 'new'} resource={editing}
-      branches={branches} categories={categories}
+      branches={branches} categories={categories} departments={departments}
       close={() => { setAdding(false); setEditing(null); }}
       saved={code => saved(code + (editing ? ' updated.' : ' registered.'))}
       onDocumentsChange={updated => {

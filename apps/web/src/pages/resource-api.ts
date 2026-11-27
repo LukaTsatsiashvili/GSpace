@@ -4,6 +4,7 @@ export type ResourceType = 'Physical Asset' | 'Digital Asset' | 'Bundle';
 export type CustomDefinition = { key: string; label: string; required: boolean };
 export type Category = { id: string; name: string; definitions: CustomDefinition[] };
 export type Branch = { id: string; name: string };
+export type ResourceDepartment={id:string;name:string;branchId:string};
 export type DocumentMeta = { id: string; filename: string; mimeType: string; byteSize: number; createdAt: string };
 export type ResourceCustody = {
   assignmentId: string; assignmentCode: string; userId: string;
@@ -27,7 +28,7 @@ export type ResourceAssignmentHistory = {
 };
 export type ResourceRecord = {
   id: string; assetCode: string; name: string; category: string; resourceType: ResourceType;
-  condition: ResourceCondition; status: ResourceStatus; branchId: string; branch: string;
+  condition: ResourceCondition; status: ResourceStatus; branchId: string; branch: string;departmentId?:string|null;department?:string|null;
   location: string; serialNumber: string | null; description: string;
   warrantyEnd: string | null; customFields: Record<string, string>;
   documents: DocumentMeta[]; createdAt: string; updatedAt: string;
@@ -37,7 +38,7 @@ export type ResourceRecord = {
 };
 export type ResourcePayload = {
   name: string; category: string; resourceType: ResourceType; condition: ResourceCondition;
-  status: 'AVAILABLE' | 'RETIRED'; branchId: string; location: string; serialNumber: string | null;
+  status: 'AVAILABLE' | 'RETIRED'; branchId: string; departmentId?:string|null; location: string; serialNumber: string | null;
   description: string; warrantyEnd: string | null;
   purchasePrice: number | null; currency: 'GEL' | 'USD' | 'EUR';
   purchaseDate: string | null; supplier: string;
@@ -72,7 +73,7 @@ async function request<T>(path: string, options?: { method: 'POST' | 'PATCH' | '
 }
 export const resourceApi = {
   list: () => request<{ resources: ResourceRecord[]; summary: ResourceSummary; truncated: boolean }>('/'),
-  catalog: () => request<{ branches: Branch[]; categories: Category[] }>('/catalog'),
+  catalog: () => request<{ branches: Branch[]; categories: Category[];departments:ResourceDepartment[] }>('/catalog'),
   one: (id: string) => request<{ resource: ResourceRecord }>('/' + encodeURIComponent(id)),
   create: (body: ResourcePayload & { documents: FilePayload[] }) =>
     request<{ id: string; assetCode: string }>('/', { method: 'POST', body }),

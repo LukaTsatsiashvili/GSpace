@@ -4,7 +4,7 @@ import { Button, Input, NumberInput, Select, Textarea } from '../components/ui';
 import { useAuth } from '../auth/AuthGate';
 import {
   asFilePayload, resourceApi,
-  type Branch, type Category, type ResourcePayload, type ResourceRecord,
+  type Branch, type Category, type ResourceDepartment, type ResourcePayload, type ResourceRecord,
   type ResourceCondition, type ResourceType
 } from './resource-api';
 import ResourceDocuments from './ResourceDocuments';
@@ -12,7 +12,7 @@ import './new-resource.css';
 
 type FormData = {
   name: string; category: string; condition: ResourceCondition; type: ResourceType; notes: string;
-  branch: string; location: string; serial: string; warranty: string;
+  branch: string; department: string; location: string; serial: string; warranty: string;
   price: string; currency: 'GEL' | 'USD' | 'EUR';
   purchaseDate: string; supplier: string; usefulLife: string; residual: string;
   status: 'AVAILABLE' | 'RETIRED';
@@ -47,7 +47,7 @@ function initialForm(branches: Branch[], categories: Category[], resource?: Reso
     condition: resource?.condition ?? 'Good',
     type: resource?.resourceType ?? 'Physical Asset',
     notes: resource?.description ?? '',
-    branch: resource?.branchId ?? branches[0]?.id ?? '',
+    branch: resource?.branchId ?? branches[0]?.id ?? '',department:resource?.departmentId??'',
     location: resource?.location ?? '', serial: resource?.serialNumber ?? '',
     warranty: dateOnly(resource?.warrantyEnd),
     price: resource?.purchasePrice ?? '', currency: (resource?.currency as FormData['currency']) ?? 'GEL',
@@ -58,9 +58,9 @@ function initialForm(branches: Branch[], categories: Category[], resource?: Reso
   };
 }
 
-export default function NewResourceDialog({ close, branches, categories, resource, saved,
+export default function NewResourceDialog({ close, branches, categories, departments=[],resource, saved,
   onDocumentsChange }: {
-  close: () => void; branches: Branch[]; categories: Category[];
+  close: () => void; branches: Branch[]; categories: Category[];departments?:ResourceDepartment[];
   resource?: ResourceRecord | null; saved: (assetCode: string) => void;
   onDocumentsChange?: (resource: ResourceRecord) => void
 }) {
@@ -78,8 +78,10 @@ export default function NewResourceDialog({ close, branches, categories, resourc
   const content = useRef<HTMLDivElement>(null);
   const category = categories.find(c => c.name === form.category);
   const branch = branches.find(b => b.id === form.branch);
+  const canAllocate=['SYSTEM_ADMIN','COMPANY_ADMIN'].includes(user.role.key);
+  const departmentOptions=departments.filter(d=>d.branchId===form.branch);
   const update = (key: keyof FormData) => (value: string) => {
-    setForm(current => ({ ...current, [key]: value }));
+    setForm(current => ({ ...current, [key]: value,...(key==='branch'?{department:''}:{}) }));
     setError('');
   };
   const field = (key: keyof FormData, placeholder = '', type = 'text') =>
@@ -125,7 +127,7 @@ export default function NewResourceDialog({ close, branches, categories, resourc
       const money = validate();
       setPending(true); setError('');
       const payload: ResourcePayload = {
-        name: form.name.trim(), category: form.category, branchId: form.branch,
+        name: form.name.trim(), category: form.category, branchId: form.branch,...(canAllocate?{departmentId:form.department||null}:{}),
         resourceType: form.type, condition: form.condition, status: form.status,
         location: form.location.trim(), serialNumber: form.serial.trim() || null,
         description: form.notes.trim(), warrantyEnd: form.warranty || null,
@@ -168,7 +170,7 @@ export default function NewResourceDialog({ close, branches, categories, resourc
   const summary = [
     ['Resource name', form.name], ['Asset ID', resource?.assetCode ?? 'Automatically generated'],
     ['Resource type', form.type], ['Category', form.category],
-    ['Condition', form.condition], ['Branch', branch?.name ?? '—'],
+    ['Condition', form.condition], ['Branch', branch?.name ?? '—'],['Department',departmentOptions.find(d=>d.id===form.department)?.name??'Unallocated'],
     ['Location', form.location || 'Not specified'],
     ['Serial number', form.serial || 'Not specified'],
     ['Purchase price', canFinance && form.price ? form.price + ' ' + form.currency : 'Not specified'],
@@ -222,6 +224,7 @@ export default function NewResourceDialog({ close, branches, categories, resourc
           <div className="nw-fields">
             <SelectField label="Branch" required value={branch?.name ?? ""} options={branches.map(b => b.name)}
               change={name => update('branch')(branches.find(b => b.name === name)?.id ?? '')}/>
+            {canAllocate&&departmentOptions.length>0&&<SelectField label="Department" value={departmentOptions.find(d=>d.id===form.department)?.name??'Unallocated'} options={['Unallocated',...departmentOptions.map(d=>d.name)]} change={v=>update('department')(departmentOptions.find(d=>d.name===v)?.id??'')}/>}
             <Field label="Storage / location">{field('location', 'e.g. IT Storage — Shelf A')}</Field>
             <Field label="Serial number">{field('serial', 'Manufacturer serial')}</Field>
             <Field label="Warranty end date">{field('warranty', '', 'date')}</Field>

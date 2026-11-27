@@ -48,9 +48,10 @@ export function TransferPreviewMessage({ title, description, close }: { title: s
 export function NewTransferDialog({ close,lookups,onChanged }: { close: () => void;lookups:Lookups;onChanged:()=>void }) {
   const toast=useToast();const [busy,setBusy]=useState(false);
   const label=(b:Lookups['branches'][number])=>[b.businessUnit?.name,b.brand?.name,b.name+' ('+b.code+')'].filter(Boolean).join(' / ');
-  const destinations=lookups.branches.map(label);
-  const sources=lookups.branches.filter(b=>lookups.global||b.id===lookups.ownBranchId).map(label);
-  const availableAssets=lookups.assets.map(a=>({...a,location:lookups.branches.filter(b=>b.id===a.branchId).map(label)[0]??''}));
+  const locations=lookups.branches.flatMap(b=>[{branchId:b.id,departmentId:null as string|null,label:label(b)},...lookups.departments.filter(x=>x.branchId===b.id).map(x=>({branchId:b.id,departmentId:x.id,label:label(b)+' / '+x.name}))]);
+  const destinations=locations.map(x=>x.label);
+  const sources=locations.filter(x=>(lookups.global||x.branchId===lookups.ownBranchId)&&(!lookups.departmentIds.length||!!x.departmentId&&lookups.departmentIds.includes(x.departmentId))).map(x=>x.label);
+  const availableAssets=lookups.assets.map(a=>({...a,location:locations.find(x=>x.branchId===a.branchId&&x.departmentId===a.departmentId)?.label??''}));
   const routes=lookups.canDirect?['Manager approval','Direct dispatch']:['Manager approval'];
   const [step, setStep] = useState<1 | 2>(1);
   const [source, setSource] = useState(sources[0]??'');
@@ -61,10 +62,10 @@ export function NewTransferDialog({ close,lookups,onChanged }: { close: () => vo
   const [reason, setReason] = useState('');
   const [error, setError] = useState('');
   const [preview, setPreview] = useState(false);
-  const destId=lookups.branches.find(b=>label(b)===destination)?.id;
-  const people=lookups.people.filter(p=>p.branchId===destId);
+  const origin=locations.find(x=>x.label===source),dest=locations.find(x=>x.label===destination);
+  const people=lookups.people.filter(p=>p.branchId===dest?.branchId&&p.departmentId===dest?.departmentId);
   const personLabel=(p:Lookups['people'][number])=>p.fullName+' ('+p.id.slice(0,8)+')';
-  async function submit(){setBusy(true);try{await api.create({sourceId:lookups.branches.find(b=>label(b)===source)?.id,destinationId:destId,recipientId:people.find(p=>personLabel(p)===recipient)?.id,resourceIds:selected,route,reason});toast.success('Transfer created');onChanged();}catch(e){toast.error(e instanceof Error?e.message:'Create failed');}finally{setBusy(false);}}
+  async function submit(){setBusy(true);try{await api.create({sourceId:origin?.branchId,destinationId:dest?.branchId,sourceDepartmentId:origin?.departmentId??null,destinationDepartmentId:dest?.departmentId??null,recipientId:people.find(p=>personLabel(p)===recipient)?.id,resourceIds:selected,route,reason});toast.success('Transfer created');onChanged();}catch(e){toast.error(e instanceof Error?e.message:'Create failed');}finally{setBusy(false);}}
   const bodyRef = useRef<HTMLDivElement>(null);
 
   useDialogEscape(() => {
@@ -78,7 +79,7 @@ export function NewTransferDialog({ close,lookups,onChanged }: { close: () => vo
   const chooseSource = (value: string) => { setSource(value); setSelected([]); setError(''); };
   const toggle = (id: string) => { setSelected(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id]); setError(''); };
   const review = () => {
-    if (!source||!destination||source === destination) { setError('Source and destination locations must be different.'); return; }
+    if (!origin||!dest||source === destination||(origin.branchId===dest.branchId&&(!origin.departmentId||!dest.departmentId))) { setError('Source and destination locations must be different.'); return; }
     if (!people.some(p=>personLabel(p)===recipient)) { setError('Choose a transfer recipient.'); return; }
     if (selected.length > 25) { setError('Select at most 25 resources.'); return; }
     if (selected.length === 0) { setError('Select at least one resource to transfer.'); return; }
