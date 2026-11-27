@@ -10,6 +10,7 @@ import adminOrganizationRouter from './routes/admin-organization.js';
 import resourcesRouter from './routes/resources.js';
 import assignmentsRouter from './routes/assignments.js';
 import organizationCatalog from './routes/organization-catalog.js';
+import transfersRouter from './routes/transfers.js';
 import approvalsRouter from './routes/approvals.js';
 import { csrfGuard } from './security/auth.js';
 
@@ -35,6 +36,7 @@ app.use('/api/v1/admin', adminRouter);
 app.use('/api/v1/resources', resourcesRouter);
 app.use('/api/v1/assignments', assignmentsRouter);
 app.use('/api/v1/approvals', approvalsRouter);
+app.use('/api/v1/transfers', transfersRouter);
 app.use('/api', (_req, res) => {
   res.status(404).json({ error: { code: 'NOT_FOUND', message: 'API endpoint not found' } });
 });

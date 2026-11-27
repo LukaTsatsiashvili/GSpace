@@ -52,6 +52,8 @@ model Branch {
   users       User[]
   departments Department[]
   resources   Resource[]
+  transfersOut BranchTransfer[] @relation("TransferSource")
+  transfersIn BranchTransfer[] @relation("TransferDestination")
   assignments Assignment[]
   approvalRequests ApprovalRequest[]
   createdAt   DateTime     @default(now())
@@ -96,6 +98,8 @@ model User {
   sessions       Session[]
   actorEvents    SecurityAuditEvent[] @relation("AuditActor")
   targetEvents   SecurityAuditEvent[] @relation("AuditTarget")
+  transfersSent BranchTransfer[] @relation("TransferSender")
+  transfersReceived BranchTransfer[] @relation("TransferRecipient")
   assignmentsReceived Assignment[] @relation("AssignmentRecipient")
   assignmentsIssued Assignment[] @relation("AssignmentIssuer")
   approvalRequests ApprovalRequest[] @relation("ApprovalRequester")
@@ -188,6 +192,7 @@ model Resource {
   residualValue      Decimal?       @db.Decimal(18, 2)
   customFields       Json           @default("{}")
   documents          ResourceDocument[]
+  transferItems      BranchTransferItem[]
   assignmentItems    AssignmentItem[]
   createdAt          DateTime       @default(now())
   updatedAt          DateTime       @updatedAt
@@ -461,4 +466,55 @@ model Brand {
   name String @unique
   active Boolean @default(true)
   branches Branch[]
+}
+
+model BranchTransferCounter {
+  name String @id
+  nextNumber Int
+}
+model BranchTransfer {
+  id String @id @default(uuid())
+  code String @unique
+  sourceId String
+  source Branch @relation("TransferSource", fields: [sourceId], references: [id], onDelete: Restrict)
+  destinationId String
+  destination Branch @relation("TransferDestination", fields: [destinationId], references: [id], onDelete: Restrict)
+  senderId String
+  sender User @relation("TransferSender", fields: [senderId], references: [id], onDelete: Restrict)
+  recipientId String
+  recipient User @relation("TransferRecipient", fields: [recipientId], references: [id], onDelete: Restrict)
+  route String
+  status String
+  reason String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  items BranchTransferItem[]
+  events BranchTransferEvent[]
+  @@index([sourceId, status])
+  @@index([destinationId, status])
+}
+model BranchTransferItem {
+  id String @id @default(uuid())
+  transferId String
+  transfer BranchTransfer @relation(fields: [transferId], references: [id], onDelete: Restrict)
+  resourceId String
+  resource Resource @relation(fields: [resourceId], references: [id], onDelete: Restrict)
+  status String @default("PENDING")
+  notes String @default("")
+  evidenceName String?
+  evidenceMime String?
+  evidence Bytes?
+  @@unique([transferId, resourceId])
+  @@index([resourceId, status])
+}
+model BranchTransferEvent {
+  id String @id @default(uuid())
+  transferId String
+  transfer BranchTransfer @relation(fields: [transferId], references: [id], onDelete: Restrict)
+  actorId String
+  actorName String
+  action String
+  notes String @default("")
+  createdAt DateTime @default(now())
+  @@index([transferId, createdAt])
 }
