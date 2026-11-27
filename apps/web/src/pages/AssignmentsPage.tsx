@@ -287,7 +287,10 @@ function AssignmentDrawer({ assignment, lookups, userId, close, done }: {
         </div></section>
         {assignment.notes && <section className="as-drawer-section"><h3>Handover notes</h3><p className="as-review-notes">{assignment.notes}</p></section>}
         <section className="as-drawer-section"><h3>Activity timeline</h3><ol className="as-timeline">{assignment.activity.map(ev =>
-          <li key={ev.id}><strong>{ev.title}</strong><span>{ev.detail}</span></li>)}</ol></section>
+          <li key={ev.id}><strong>{ev.title}</strong><span>{ev.detail}</span>
+            {ev.details?.confirmationMode === 'MANAGER_RECORDED_PHYSICAL_HANDOVER' &&
+              <small>Physical handover recorded by manager for {assignment.employee} (not employee sign-off)</small>}
+            {ev.details?.note && <small>Notes: {ev.details.note}</small>}</li>)}</ol></section>
         <p className="as-detail-hint">Every custody action is recorded in the database. Returned assets become available only after manager verification.</p>
       </div>
       <footer className="as-drawer-footer as-actions-footer"><Button onClick={close}>Close</Button>
