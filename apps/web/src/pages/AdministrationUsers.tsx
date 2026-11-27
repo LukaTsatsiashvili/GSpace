@@ -6,7 +6,7 @@ import { useAuth } from '../auth/AuthGate';
 import { useToast } from '../components/toast';
 
 type Role = { id: string; key: string; name: string; protected: boolean };
-type Branch = { id: string; name: string };
+type Branch = { id: string; name: string; kind?:string };
 type Department = { id: string; name: string; branchId?: string };
 type Account = {
   id: string; name: string; email: string; role: Role; branch: Branch;
@@ -93,10 +93,11 @@ function Form({ user, lookups, close, saved }: {
   const isProtected = user?.role.protected ?? false;
   const branches = lookups.branches;
   const departments = lookups.departments.filter(d => d.branchId === form.branchId);
-  const roleOptions = lookups.roles.filter(r => !r.protected || user?.role.id === r.id);
+  const isStore=branches.find(b=>b.id===form.branchId)?.kind==='STORE';
+  const roleOptions = lookups.roles.filter(r => (!r.protected || user?.role.id === r.id)&&(!isStore||['EMPLOYEE','BRANCH_MANAGER'].includes(r.key)));
   const assignableRoles = isSelf || isProtected ? lookups.roles.filter(r => r.id === user?.role.id) : roleOptions;
   const change = (key: keyof FormValues, value: string | boolean) => {
-    setForm(old => ({ ...old, [key]: value, ...(key === 'branchId' ? { departmentId: '' } : {}) }));
+    setForm(old => ({ ...old, [key]: value, ...(key === 'branchId' ? { departmentId: '', ...(branches.find(b=>b.id===value)?.kind==='STORE'&&!lookups.roles.some(r=>r.id===old.roleId&&['EMPLOYEE','BRANCH_MANAGER'].includes(r.key))?{roleId:lookups.roles.find(r=>r.key==='EMPLOYEE')?.id??''}:{}) } : {}) }));
     setError('');
   };
   const selectedRole = lookups.roles.find(r => r.id === form.roleId);
@@ -107,7 +108,7 @@ function Form({ user, lookups, close, saved }: {
   function validate() {
     if (form.name.trim().split(/\s+/).length < 2) { setError('Enter first and last name.'); return; }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) { setError('Enter a valid work email.'); return; }
-    if (!selectedRole || !selectedBranch) { setError('Choose role and branch.'); return; }
+    if (!selectedRole || !selectedBranch || (isStore&&!['EMPLOYEE','BRANCH_MANAGER'].includes(selectedRole.key))) { setError('Choose role and branch.'); return; }
     setReview(true);
     setError('');
   }
@@ -266,6 +267,7 @@ export default function AdministrationUsers({ openCreate, closeCreate, onSummary
   const [role, setRole] = useState('All roles');
   const [branch, setBranch] = useState('All branches');
   const organizationFilter=useOrganizationFilter();
+  const [departmentFilter,setDepartmentFilter]=useState('All departments');
   const [status, setStatus] = useState('All statuses');
   const [selected, setSelected] = useState<Account | null>(null);
   const [editing, setEditing] = useState<Account | null>(null);
@@ -296,8 +298,8 @@ export default function AdministrationUsers({ openCreate, closeCreate, onSummary
     return (!query || [u.name, u.email, u.role.name, u.branch.name, u.department?.name || ''].some(x => x.toLowerCase().includes(query)))
       && (role === 'All roles' || u.role.name === role)
       && (branch === 'All branches' || u.branch.name === branch) && organizationFilter.matches(u.branch.id)
-      && (status === 'All statuses' || state === status);
-  }), [users, search, role, branch, status,organizationFilter]);
+      && (status === 'All statuses' || state === status) && (departmentFilter==='All departments'||u.department?.name===departmentFilter);
+  }), [users, search, role, branch, status,organizationFilter,departmentFilter]);
   function saved(activationPath: string | null) {
     setEditing(null); setCreateInternal(false); closeCreate(); setSelected(null); setResetting(null);
     if (activationPath) setInvite(activationPath);
@@ -316,7 +318,7 @@ export default function AdministrationUsers({ openCreate, closeCreate, onSummary
         value={search} onChange={e => setSearch(e.target.value)}/>
       <Select className="am-filter" label="Filter role" options={['All roles', ...lookups.roles.map(r => r.name)]} value={role} onChange={setRole}/>
       <Select className="am-filter" label="Filter user status" options={['All statuses','Active','Inactive','Pending']} value={status} onChange={setStatus}/>
-      <OrganizationFilters filter={organizationFilter}/>{!organizationFilter.branches.length&&<Select className="am-filter" label="Filter branch" options={['All branches', ...lookups.branches.map(b => b.name)]} value={branch} onChange={setBranch}/>}
+      <OrganizationFilters filter={organizationFilter}/><Select label="Filter department" value={departmentFilter} options={['All departments',...new Set(users.filter(u=>organizationFilter.matches(u.branch.id)).flatMap(u=>u.department?[u.department.name]:[])),...(departmentFilter==='All departments'?[]:[departmentFilter])].filter((v,i,a)=>a.indexOf(v)===i)} onChange={setDepartmentFilter}/><Button onClick={()=>{setSearch('');setRole('All roles');setStatus('All statuses');setBranch('All branches');setDepartmentFilter('All departments');organizationFilter.reset();}}>Clear filters</Button>{!organizationFilter.branches.length&&<Select className="am-filter" label="Filter branch" options={['All branches', ...lookups.branches.map(b => b.name)]} value={branch} onChange={setBranch}/>}
       <span className="am-spacer"/>
       <Button variant="primary" icon={<Plus size={16}/>} onClick={openNew}>Add user</Button>
     </div>

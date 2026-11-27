@@ -178,6 +178,7 @@ router.patch('/organization/branches/:branchId', writePermission, run(async (req
       const before = await tx.branch.findUnique({ where: { id: key.data } });
       if (!before) throw Error('BRANCH_NOT_FOUND');
       if (await nameUsed(tx, 'branch', input.data.name, undefined, before.id)) throw Error('BRANCH_EXISTS');
+      if(before.kind!=='LEGACY'&&input.data.kind==='LEGACY')throw Error('INVALID_CLASSIFICATION');
       await validateClassification(tx,{...before,...input.data},before.id);
       if (!await validLeader(tx, input.data.managerId, before.id)) throw Error('INVALID_MANAGER');
       if (!input.data.active) {
