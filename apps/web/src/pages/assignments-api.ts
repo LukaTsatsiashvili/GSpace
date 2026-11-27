@@ -16,7 +16,9 @@ export type Assignment = {
   branchId: string; branch: string; recipientId: string; employee: string;
   issuedBy: string; issued: string; returnDue: string | null;
   status: AssignmentStatus; notes: string; assets: AssignmentAsset[];
-  activity: { id: string; title: string; detail: string; details: unknown }[];
+  activity: { id: string; title: string; detail: string; details: {
+    confirmationMode?: string; recordedByUserId?: string; recipientId?: string; note?: string;
+  } | null }[];
 };
 export type Recipient = { id: string; fullName: string; branchId: string };
 export type AvailableAsset = { id: string; assetCode: string; name: string; condition: string; branchId: string };
@@ -53,8 +55,8 @@ export const assignmentsApi = {
   lookups: () => request<Lookups>('/lookups'),
   issue: (data: { recipientId: string; resourceIds: string[]; dueAt: string | null; notes: string }) =>
     request<{ id: string; code: string }>('/', data),
-  receipt: (id: string, decisions: Receipt[]) =>
-    request<{ ok: boolean }>('/' + encodeURIComponent(id) + '/receipt', { decisions }),
+  receipt: (id: string, decisions: Receipt[], onBehalfOf = false) =>
+    request<{ ok: boolean }>('/' + encodeURIComponent(id) + '/receipt', { decisions, onBehalfOf }),
   requestReturn: (id: string, itemIds: string[]) =>
     request<{ ok: boolean }>('/' + encodeURIComponent(id) + '/returns/request', { itemIds }),
   verifyReturn: (id: string, items: { itemId: string; condition: string }[]) =>

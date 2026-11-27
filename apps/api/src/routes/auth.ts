@@ -41,7 +41,7 @@ router.post('/activate', asyncRoute(async (req, res) => {
     include: { user: { include: { role: true, branch: true } } }
   });
   if (!invitation || invitation.usedAt || invitation.expiresAt <= now ||
-      !invitation.user.active || !invitation.user.role.active || !invitation.user.branch.active) {
+      !invitation.user.active || !invitation.user.role.active || invitation.user.role.key === 'EMPLOYEE' || !invitation.user.branch.active) {
     res.status(400).json({ error: { code: 'INVALID_ACTIVATION', message: 'This activation link is expired or unavailable' } });
     return;
   }
@@ -101,7 +101,7 @@ router.post('/login', asyncRoute(async (req, res) => {
   const valid = user?.credential
     ? await verifyPassword(input.data.password, user.credential.passwordHash)
     : (await burnPasswordCheck(input.data.password), false);
-  const eligible = !!user && !!valid && !user.credential?.loginDisabled && user.active && user.branch.active && user.role.active;
+  const eligible = !!user && !!valid && !user.credential?.loginDisabled && user.active && user.branch.active && user.role.active && user.role.key !== 'EMPLOYEE';
   if (!eligible) {
     await recordFailedLogin(throttleKey);
     await db.securityAuditEvent.create({ data: {

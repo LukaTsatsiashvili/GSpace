@@ -74,7 +74,7 @@ function AppShell() {
         })}
         {!filteredModules.length && <p className="sidebar-no-results">No matching modules</p>}
       </nav>
-      <div className="sidebar-note"><strong>Design prototype</strong><p>This is a visual concept with sample data, not a connected production system.</p></div>
+      <div className="sidebar-note"><strong>Development build</strong><p>Administration, Resources, Assignments and Approvals use real data. Other modules remain UI previews.</p></div>
     </aside>
     <div className="main-area">
       <header className="topbar"><div className="breadcrumbs"><button className="mobile-menu icon-action" aria-label="Open navigation" onClick={() => setMenuOpen(true)}><Menu size={20}/></button><span>Workspace</span><span className="breadcrumb-chevron">›</span><strong>{current.label}</strong></div><div className="top-actions">

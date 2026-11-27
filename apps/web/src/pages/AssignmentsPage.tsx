@@ -118,8 +118,8 @@ function CreateDialog({ lookups, close, done }: { lookups: Lookups; close: () =>
   </Modal>;
 }
 type Decision = 'Decide later' | 'Accept' | 'Report issue';
-function ReceiptDialog({ assignment, close, done }: {
-  assignment: Assignment; close: () => void; done: (message: string) => void
+function ReceiptDialog({ assignment, close, done, onBehalfOf }: {
+  assignment: Assignment; close: () => void; done: (message: string) => void; onBehalfOf: boolean
 }) {
   const pending = assignment.assets.filter(item => item.receipt === 'PENDING');
   const [decisions, setDecisions] = useState<Record<string, Decision>>({});
@@ -141,12 +141,13 @@ function ReceiptDialog({ assignment, close, done }: {
           notes, damageReported: !!damaged[item.itemId], ...(file ? { evidence: await asFilePayload(file) } : {}) });
       }
       if (!entries.length) throw Error('Choose at least one item to confirm');
-      await assignmentsApi.receipt(assignment.id, entries);
+      if (onBehalfOf && notes.trim().length < 10) throw Error('Describe the physical handover in at least 10 characters.');
+      await assignmentsApi.receipt(assignment.id, entries, onBehalfOf);
       done(entries.length + ' receipt decision(s) recorded.');
     } catch (e) { setError(errorText(e)); } finally { setBusy(false); }
   }
-  return <Modal wide title={review ? 'Review receipt decisions' : 'Confirm received resources'}
-    subtitle="Confirm each item individually; undecided items remain pending." close={close}
+  return <Modal wide title={review ? 'Review receipt decisions' : onBehalfOf ? 'Record physical handover for employee' : 'Confirm received resources'}
+    subtitle={onBehalfOf ? 'You are recording a manager-witnessed physical handover. This does not claim that the employee signed in or acknowledged it.' : 'Confirm each item individually; undecided items remain pending.'} close={close}
     footer={<><Button onClick={review ? () => setReview(false) : close}>{review ? 'Back to edit' : 'Cancel'}</Button>
       <Button variant="primary" disabled={busy} onClick={() => review ? void submit() :
         selected.length ? (setError(''), setReview(true)) : setError('Choose a receipt decision')}>
@@ -157,7 +158,7 @@ function ReceiptDialog({ assignment, close, done }: {
           <strong>{item.name}</strong><small>{item.id} · {item.condition}</small></div>
         <span className={'as-decision-tag ' + (decisions[item.itemId] === 'Accept' ? 'accept' : 'issue')}>
           {decisions[item.itemId]}</span></div>)}</div>
-      <p className="as-receipt-hint">These choices will be saved and added to the permanent custody audit trail.</p>
+      <p className="as-receipt-hint">{onBehalfOf ? 'The audit will identify you as the manager who recorded the handover, and ' + assignment.employee + ' as the resource custodian.' : 'These choices will be saved and added to the permanent custody audit trail.'}</p>
     </> : <>
       <div className="as-receipt-items">{pending.map(item => <div className="as-receipt-item-wrap" key={item.itemId}>
         <div className="as-receipt-item"><span className="as-review-asset-icon"><Box size={18}/></span>
@@ -179,7 +180,7 @@ function ReceiptDialog({ assignment, close, done }: {
             <small>{files[item.itemId]?.name ?? 'JPEG, PNG or WebP · max 2 MB'}</small></div>}
       </div>)}</div>
       <p className="as-receipt-hint">Photo evidence is optional except for damaged items. Reporting an issue requires manager review; it does not release the asset.</p>
-      <Field title="Notes (optional)"><Textarea rows={3} value={notes} onChange={event => setNotes(event.target.value)}/></Field>
+      <Field title={onBehalfOf ? 'Physical handover notes (required, at least 10 characters)' : 'Notes (optional)'}><Textarea rows={3} value={notes} onChange={event => setNotes(event.target.value)}/></Field>
     </>}
     {error && <p className="as-form-error" role="alert">{error}</p>}
   </Modal>;
@@ -253,7 +254,7 @@ function AssignmentDrawer({ assignment, lookups, userId, close, done }: {
   const [action, setAction] = useState<Action | null>(null);
   const toast = useToast();
   const canManage = lookups.canManage && (lookups.branches.some(x => x.id === assignment.branchId));
-  const canReceive = assignment.recipientId === userId && assignment.assets.some(item => item.receipt === 'PENDING');
+  const canReceive = (canManage || assignment.recipientId === userId) && assignment.assets.some(item => item.receipt === 'PENDING');
   const canRequest = (canManage || assignment.recipientId === userId) &&
     assignment.assets.some(item => ['ACCEPTED', 'ISSUE_REPORTED'].includes(item.receipt));
   const canVerify = canManage && assignment.assets.some(item => item.receipt === 'RETURN_REQUESTED');
@@ -281,22 +282,35 @@ function AssignmentDrawer({ assignment, lookups, userId, close, done }: {
           </div>)}</div></section>
         <section className="as-drawer-section"><h3>Custody workflow</h3><div className="as-workflow">
           <div className="as-workflow-step"><span className="as-workflow-mark"><Check size={15}/></span><strong>Issued</strong><small>{fmt(assignment.issued)}</small></div>
-          <div className="as-workflow-step"><span className="as-workflow-mark">{assignment.status === 'Pending confirmation' ? '2' : <Check size={15}/>}</span><strong>Recipient confirms</strong><small>Per item</small></div>
+          <div className="as-workflow-step"><span className="as-workflow-mark">{assignment.status === 'Pending confirmation' ? '2' : <Check size={15}/>}</span><strong>Handover confirmed</strong><small>Per item</small></div>
           <div className="as-workflow-step"><span className="as-workflow-mark">{assignment.status === 'Completed' ? <Check size={15}/> : '3'}</span><strong>Returned / transferred</strong><small>{assignment.status}</small></div>
         </div></section>
         {assignment.notes && <section className="as-drawer-section"><h3>Handover notes</h3><p className="as-review-notes">{assignment.notes}</p></section>}
         <section className="as-drawer-section"><h3>Activity timeline</h3><ol className="as-timeline">{assignment.activity.map(ev =>
-          <li key={ev.id}><strong>{ev.title}</strong><span>{ev.detail}</span></li>)}</ol></section>
+          <li key={ev.id}>
+            <strong>{ev.title}</strong>
+            <span className="as-timeline-meta">{ev.detail}</span>
+            {ev.details?.confirmationMode === 'MANAGER_RECORDED_PHYSICAL_HANDOVER' ? (
+              <div className="as-timeline-handover">
+                <span className="as-timeline-handover-line">ფიზიკური გადაცემა განხორციელდა მენეჯერის მიერ</span>
+                {ev.details.note && (
+                  <span className="as-timeline-handover-line">კომენტარი: {ev.details.note}</span>
+                )}
+              </div>
+            ) : ev.details?.note ? (
+              <span className="as-timeline-other-note">Notes: {ev.details.note}</span>
+            ) : null}
+          </li>)}</ol></section>
         <p className="as-detail-hint">Every custody action is recorded in the database. Returned assets become available only after manager verification.</p>
       </div>
       <footer className="as-drawer-footer as-actions-footer"><Button onClick={close}>Close</Button>
-        <div>{canReceive && <Button variant="primary" onClick={() => setAction('receipt')}>Review receipt</Button>}
+        <div>{canReceive && <Button variant="primary" onClick={() => setAction('receipt')}>{assignment.recipientId === userId ? 'Review receipt' : 'Record handover'}</Button>}
           {canRequest && <Button onClick={() => setAction('request')}>Request return</Button>}
           {canVerify && <Button variant="primary" onClick={() => setAction('verify')}>Verify return</Button>}
           {canTransfer && <Button onClick={() => setAction('transfer')}>Transfer</Button>}
           {canCancel && <Button onClick={() => setAction('cancel')}>Cancel transfer</Button>}</div>
       </footer>
-      {action === 'receipt' && <ReceiptDialog assignment={assignment} close={() => setAction(null)} done={done}/>}
+      {action === 'receipt' && <ReceiptDialog assignment={assignment} onBehalfOf={assignment.recipientId !== userId} close={() => setAction(null)} done={done}/>}
       {action && action !== 'receipt' && <WorkflowDialog action={action} assignment={assignment} lookups={lookups} close={() => setAction(null)} done={done}/>}
     </aside>
   </div>;

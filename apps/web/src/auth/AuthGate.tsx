@@ -29,7 +29,7 @@ export function canOpenModule(id: string, permissions: string[]): boolean {
     case 'overview': return true;
     case 'resources': return has('assets.view');
     case 'assignments': return has('assets.view', 'assignments.manage');
-    case 'approvals': return true; // personal requests need per-operation API checks later
+    case 'approvals': return has('approvals.request', 'approvals.review', 'approvals.configure', 'audit.view');
     case 'transfers': return has('transfers.manage');
     case 'inventory': return has('inventory.manage');
     case 'licenses': return has('licenses.manage');

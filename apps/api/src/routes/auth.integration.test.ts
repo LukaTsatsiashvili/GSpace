@@ -460,10 +460,19 @@ test('session login, CSRF, RBAC directory read and logout', { skip: !process.env
       headers: { cookie: csrfCookie, 'content-type': 'application/json', 'x-csrf-token': csrf.csrfToken },
       body: JSON.stringify({ email: employee.email, password })
     });
-    assert.equal(loginEmployee.status, 200);
-    const employeeCookie = loginEmployee.headers.get('set-cookie')?.split(';')[0];
-    assert.ok(employeeCookie);
-    const employeeCookies = csrfCookie + '; ' + employeeCookie;
+    assert.equal(loginEmployee.status, 401); // Employee is a resource custodian, not an app user.
+    const employeeCookies = csrfCookie; // No authenticated employee session exists.
+    const createEmployeeDirectory = await fetch(base + '/api/v1/admin/users', {
+      method: 'POST', headers: { cookie: both, 'content-type': 'application/json', 'x-csrf-token': csrf.csrfToken },
+      body: JSON.stringify({
+        name: 'Directory Only Custodian', email: 'no-login-custodian@example.test',
+        roleId: employeeRole.id, branchId: adminIdentity.branchId, departmentId: null, active: true
+      })
+    });
+    assert.equal(createEmployeeDirectory.status, 201);
+    const directoryRecord = await createEmployeeDirectory.json() as { userId: string; activationPath: string | null };
+    assert.equal(directoryRecord.activationPath, null);
+    assert.equal((await db.userCredential.findUnique({ where: { userId: directoryRecord.userId } })), null);
     // Persisted assignments: issue, recipient acknowledgement, and verified return.
     const assignmentWrite = (suffix: string, cookies: string, body: object) =>
       fetch(base + '/api/v1/assignments' + suffix, {
@@ -473,9 +482,7 @@ test('session login, CSRF, RBAC directory read and logout', { skip: !process.env
       });
     assert.equal((await fetch(base + '/api/v1/assignments')).status, 401);
     const peerLookups = await fetch(base + '/api/v1/assignments/lookups', { headers: { cookie: employeeCookies } });
-    const peers = await peerLookups.json() as { recipients: { id: string }[]; availableAssets: unknown[] };
-    assert.ok(peers.recipients.some(p => p.id === adminIdentity.id));
-    assert.equal(peers.availableAssets.length, 0);
+    assert.equal(peerLookups.status, 401);
 
     // Regression: BranchManager has assignments.manage and a single-branch scope.
     // A Branch lookup must filter by Branch.id, not Resource/User.branchId.
@@ -514,7 +521,7 @@ test('session login, CSRF, RBAC directory read and logout', { skip: !process.env
     const deniedIssue = await assignmentWrite('/', employeeCookies, {
       recipientId: employee.id, resourceIds: [incompleteResource.id], dueAt: null, notes: ''
     });
-    assert.equal(deniedIssue.status, 403);
+    assert.equal(deniedIssue.status, 401);
     const createdAssignment = await assignmentWrite('/', both, {
       recipientId: employee.id, resourceIds: [incompleteResource.id], dueAt: null, notes: '=1+1'
     });
@@ -550,26 +557,36 @@ test('session login, CSRF, RBAC directory read and logout', { skip: !process.env
     assert.equal((await assignmentWrite('/' + assignmentId + '/receipt', both, {
       decisions: [{ itemId: item.id, decision: 'ACCEPT', notes: '' }]
     })).status, 403);
-    assert.equal((await assignmentWrite('/' + assignmentId + '/receipt', employeeCookies, {
-      decisions: [{ itemId: item.id, decision: 'REPORT_ISSUE',
+    assert.equal((await assignmentWrite('/' + assignmentId + '/receipt', managerCookies, {
+      onBehalfOf: true, decisions: [{ itemId: item.id, decision: 'REPORT_ISSUE',
         damageReported: true, notes: 'Damaged item reported' }]
     })).status, 400);
+    assert.equal((await assignmentWrite('/' + assignmentId + '/receipt', managerCookies, {
+      onBehalfOf: true, decisions: [{ itemId: item.id, decision: 'ACCEPT', notes: 'Short' }]
+    })).status, 400);
     const tinyPng = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+XJioAAAAASUVORK5CYII=';
-    assert.equal((await assignmentWrite('/' + assignmentId + '/receipt', employeeCookies, {
-      decisions: [{ itemId: item.id, decision: 'ACCEPT', notes: 'Confirmed in test',
+    assert.equal((await assignmentWrite('/' + assignmentId + '/receipt', managerCookies, {
+      onBehalfOf: true, decisions: [{ itemId: item.id, decision: 'ACCEPT', notes: 'Manager witnessed physical handover',
         evidence: { filename: 'receipt.png', mimeType: 'image/png', base64: tinyPng } }]
     })).status, 200);
+    const witnessedEvent = await db.assignmentEvent.findFirstOrThrow({
+      where: { assignmentId, action: 'ACCEPTED' }
+    });
+    assert.equal((witnessedEvent.details as { confirmationMode: string }).confirmationMode,
+      'MANAGER_RECORDED_PHYSICAL_HANDOVER');
+    assert.equal((witnessedEvent.details as { recipientId: string }).recipientId, employee.id);
+    assert.equal(witnessedEvent.actorId, scopedManager.id);
     assert.equal((await fetch(base + '/api/v1/assignments/' + assignmentId +
-      '/items/' + item.id + '/evidence', { headers: { cookie: employeeCookies } })).status, 200);
-    assert.equal((await assignmentWrite('/' + assignmentId + '/receipt', employeeCookies, {
-      decisions: [{ itemId: item.id, decision: 'ACCEPT', notes: 'Duplicate' }]
+      '/items/' + item.id + '/evidence', { headers: { cookie: managerCookies } })).status, 200);
+    assert.equal((await assignmentWrite('/' + assignmentId + '/receipt', managerCookies, {
+      onBehalfOf: true, decisions: [{ itemId: item.id, decision: 'ACCEPT', notes: 'Duplicate handover record' }]
     })).status, 409);
-    assert.equal((await assignmentWrite('/' + assignmentId + '/returns/request', employeeCookies, {
+    assert.equal((await assignmentWrite('/' + assignmentId + '/returns/request', managerCookies, {
       itemIds: [item.id]
     })).status, 200);
     assert.equal((await assignmentWrite('/' + assignmentId + '/returns/verify', employeeCookies, {
       items: [{ itemId: item.id, condition: 'Good' }]
-    })).status, 403);
+    })).status, 401);
     assert.equal((await assignmentWrite('/' + assignmentId + '/returns/verify', both, {
       items: [{ itemId: item.id, condition: 'Good' }]
     })).status, 200);
@@ -587,7 +604,7 @@ test('session login, CSRF, RBAC directory read and logout', { skip: !process.env
     assert.equal((await completed.json() as { assignment: { status: string } }).assignment.status, 'Completed');
 
     // Export is real CSV, limited to server-authorized handovers and audited.
-    assert.equal((await assignmentWrite('/export', employeeCookies, { ids: [assignmentId] })).status, 403);
+    assert.equal((await assignmentWrite('/export', employeeCookies, { ids: [assignmentId] })).status, 401);
     assert.equal((await assignmentWrite('/export', managerCookies, { ids: [assignmentId] })).status, 403);
     assert.equal((await assignmentWrite('/export', both, { ids: [assignmentId, assignmentId] })).status, 400);
     const exportedAssignments = await assignmentWrite('/export', both, { ids: [assignmentId] });
@@ -609,8 +626,9 @@ test('session login, CSRF, RBAC directory read and logout', { skip: !process.env
     assert.equal(original.status, 201);
     const originalId = (await original.json() as { id: string }).id;
     const originalItem = await db.assignmentItem.findFirstOrThrow({ where: { assignmentId: originalId } });
-    assert.equal((await assignmentWrite('/' + originalId + '/receipt', employeeCookies, {
-      decisions: [{ itemId: originalItem.id, decision: 'ACCEPT', notes: '' }]
+    assert.equal((await assignmentWrite('/' + originalId + '/receipt', managerCookies, {
+      onBehalfOf: true,
+      decisions: [{ itemId: originalItem.id, decision: 'ACCEPT', notes: 'Manager witnessed transfer source handover' }]
     })).status, 200);
     const beginTransfer = () => assignmentWrite('/' + originalId + '/transfers', both, {
       recipientId: adminIdentity.id, itemIds: [originalItem.id], dueAt: null, notes: 'To colleague'
@@ -627,8 +645,8 @@ test('session login, CSRF, RBAC directory read and logout', { skip: !process.env
     assert.equal(transferPendingOwner.userId, employee.id);
     assert.equal(transferPendingOwner.pendingRecipientName, adminIdentity.fullName);
     assert.equal((await fetch(base + '/api/v1/assignments/' + transferId,
-      { headers: { cookie: employeeCookies } })).status, 200);
-    assert.equal((await assignmentWrite('/' + transferId + '/transfers/cancel', employeeCookies, {})).status, 200);
+      { headers: { cookie: managerCookies } })).status, 200);
+    assert.equal((await assignmentWrite('/' + transferId + '/transfers/cancel', managerCookies, {})).status, 200);
     assert.equal((await db.assignmentItem.findUniqueOrThrow({ where: { id: originalItem.id } })).status, 'ACCEPTED');
     const secondTransfer = await beginTransfer();
     assert.equal(secondTransfer.status, 201);
@@ -636,7 +654,7 @@ test('session login, CSRF, RBAC directory read and logout', { skip: !process.env
     const nextItem = await db.assignmentItem.findFirstOrThrow({ where: { assignmentId: secondTransferId } });
     assert.equal((await assignmentWrite('/' + secondTransferId + '/receipt', employeeCookies, {
       decisions: [{ itemId: nextItem.id, decision: 'ACCEPT', notes: '' }]
-    })).status, 403);
+    })).status, 401);
     assert.equal((await assignmentWrite('/' + secondTransferId + '/receipt', both, {
       decisions: [{ itemId: nextItem.id, decision: 'ACCEPT', notes: '' }]
     })).status, 200);
@@ -660,7 +678,7 @@ test('session login, CSRF, RBAC directory read and logout', { skip: !process.env
     const employeeRead = await fetch(base + '/api/v1/admin/organization', {
       headers: { cookie: employeeCookies }
     });
-    assert.equal(employeeRead.status, 403);
+    assert.equal(employeeRead.status, 401);
     const readOnlyDocumentWrite = await fetch(base + '/api/v1/resources/' +
       createdAsset.id + '/documents', {
       method: 'POST', headers: { cookie: employeeCookies, 'content-type': 'application/json',
@@ -668,12 +686,12 @@ test('session login, CSRF, RBAC directory read and logout', { skip: !process.env
       body: JSON.stringify({ documents: [{ filename: 'test.pdf',
         mimeType: 'application/pdf', base64: Buffer.from('%PDF-1.7\ntest').toString('base64') }] })
     });
-    assert.equal(readOnlyDocumentWrite.status, 403);
+    assert.equal(readOnlyDocumentWrite.status, 401);
 
     const employeeWrite = await orgWrite('/departments', 'POST', {
       name: 'Forbidden Department', branchId: adminIdentity.branchId, leadUserId: null, active: true
     }, employeeCookies);
-    assert.equal(employeeWrite.status, 403);
+    assert.equal(employeeWrite.status, 401);
 
     // Organization leadership follows employee branch changes.
     const headOfficeRecord = await db.branch.findUniqueOrThrow({ where: { code: 'HEAD_OFFICE' } });
@@ -722,7 +740,18 @@ test('session login, CSRF, RBAC directory read and logout', { skip: !process.env
 
 
     // Administrator-issued reset link: the same activation endpoint accepts a six-character password.
-    const issueReset = await fetch(base + '/api/v1/admin/users/' + employee.id + '/reset-password', {
+    const employeeResetDenied = await fetch(base + '/api/v1/admin/users/' + employee.id + '/reset-password', {
+      method: 'POST', headers: {
+        cookie: both, 'content-type': 'application/json', 'x-csrf-token': csrf.csrfToken
+      }, body: JSON.stringify({ reason: 'Employee directory records must never gain login access' })
+    });
+    assert.equal(employeeResetDenied.status, 403);
+    const resetTarget = await db.user.create({ data: {
+      email: 'credential-reset-test@example.test', fullName: 'Reset Test Manager',
+      roleId: scopedRole.id, branchId: adminIdentity.branchId, active: true,
+      credential: { create: { passwordHash: await hashPassword(password) } }
+    } });
+    const issueReset = await fetch(base + '/api/v1/admin/users/' + resetTarget.id + '/reset-password', {
       method: 'POST', headers: {
         cookie: both, 'content-type': 'application/json', 'x-csrf-token': csrf.csrfToken
       }, body: JSON.stringify({ reason: 'Employee requested a password reset.' })
@@ -743,7 +772,7 @@ test('session login, CSRF, RBAC directory read and logout', { skip: !process.env
     const loginWith = (passwordValue: string) => fetch(base + '/api/v1/auth/login', {
       method: 'POST', headers: {
         cookie: csrfCookie, 'content-type': 'application/json', 'x-csrf-token': csrf.csrfToken
-      }, body: JSON.stringify({ email: employee.email, password: passwordValue })
+      }, body: JSON.stringify({ email: resetTarget.email, password: passwordValue })
     });
     assert.equal((await loginWith(password)).status, 401);
     const shortLogin = await loginWith('A1bcde');
@@ -766,8 +795,177 @@ test('session login, CSRF, RBAC directory read and logout', { skip: !process.env
     assert.equal((await loginWith('A1bcde')).status, 401);
     assert.equal((await loginWith('A1bcdef')).status, 200);
     assert.ok((await db.securityAuditEvent.count({
-      where: { action: 'AUTH_PASSWORD_CHANGED', actorUserId: employee.id }
+      where: { action: 'AUTH_PASSWORD_CHANGED', actorUserId: resetTarget.id }
     })) >= 1);
+
+
+
+    // Requests & Approvals: manager requests for an employee; office reviewers
+    // are allowed to live in another branch, without employee login.
+    const approvalWrite = (suffix: string, cookies: string, body: object, method: 'POST' | 'PUT' = 'POST') =>
+      fetch(base + '/api/v1/approvals' + suffix, {
+        method, headers: { cookie: cookies, 'content-type': 'application/json', 'x-csrf-token': csrf.csrfToken },
+        body: JSON.stringify(body)
+      });
+    assert.equal((await fetch(base + '/api/v1/approvals/types')).status, 401);
+    // The Employee's directory branch was changed in earlier organization tests.
+    const restoreEmployee = await fetch(base + '/api/v1/admin/users/' + employee.id, {
+      method: 'PATCH',
+      headers: { cookie: both, 'content-type': 'application/json', 'x-csrf-token': csrf.csrfToken },
+      body: JSON.stringify({ branchId: adminIdentity.branchId, departmentId: null })
+    });
+    assert.equal(restoreEmployee.status, 200);
+    const officeReviewRole = await db.role.findUniqueOrThrow({ where: { key: 'ASSET_MANAGER' } });
+    const secondReviewer = await db.user.create({ data: {
+      email: 'test-approval-backoffice@example.test', fullName: 'Back Office Reviewer',
+      roleId: officeReviewRole.id, branchId, active: true,
+      credential: { create: { passwordHash: await hashPassword(password) } }
+    } });
+    const reviewerLogin = await fetch(base + '/api/v1/auth/login', {
+      method: 'POST', headers: { cookie: csrfCookie, 'content-type': 'application/json', 'x-csrf-token': csrf.csrfToken },
+      body: JSON.stringify({ email: secondReviewer.email, password })
+    });
+    assert.equal(reviewerLogin.status, 200);
+    const reviewerSession = reviewerLogin.headers.get('set-cookie')?.split(';')[0];
+    assert.ok(reviewerSession);
+    const reviewerCookies = csrfCookie + '; ' + reviewerSession;
+    const approvalConfig = {
+      code: 'CI_APPROVAL', name: 'CI equipment approval', description: 'Back-office workflow',
+      active: true, deadlineDays: 3, beneficiaryRequired: true,
+      fields: [
+        { key: 'justification', label: 'Justification details', type: 'text', required: true },
+        { key: 'options', label: 'Equipment options', type: 'multi_select', required: false,
+          options: ['Laptop', 'Monitor'] }
+      ],
+      steps: [
+        { mode: 'ANY', targets: [{ kind: 'USER', id: adminIdentity.id }, { kind: 'USER', id: secondReviewer.id }] },
+        { mode: 'ALL', targets: [{ kind: 'USER', id: adminIdentity.id }, { kind: 'USER', id: secondReviewer.id }] }
+      ]
+    };
+    assert.equal((await approvalWrite('/types', managerCookies, approvalConfig)).status, 403);
+    // A mistakenly granted review permission never overrides Branch Manager exclusion.
+    const approvalReviewPermission = await db.permission.findUniqueOrThrow({ where: { key: 'approvals.review' } });
+    await db.rolePermission.create({ data: {
+      roleId: scopedRole.id, permissionId: approvalReviewPermission.id
+    } });
+    // Even with an old or misconfigured grant, a Branch Manager cannot approve.
+    assert.equal((await approvalWrite('/types', both, {
+      ...approvalConfig, steps: [{ mode: 'ANY', targets: [{ kind: 'USER', id: scopedManager.id }] }]
+    })).status, 400);
+    assert.equal((await approvalWrite('/types', both, {
+      ...approvalConfig, steps: [{ mode: 'ANY', targets: [{ kind: 'USER', id: employee.id }] }]
+    })).status, 400);
+    const approvedType = await approvalWrite('/types', both, approvalConfig);
+    assert.equal(approvedType.status, 201);
+    const typeId = (await approvedType.json() as { id: string }).id;
+    const lookups = await fetch(base + '/api/v1/approvals/lookups', { headers: { cookie: both } });
+    assert.equal(lookups.status, 200);
+    const available = await lookups.json() as { users: { id: string }[]; roles: { name: string }[]; employees: { id: string; branchId: string }[] };
+    assert.ok(available.users.some(u => u.id === secondReviewer.id));
+    assert.ok(!available.users.some(u => u.id === scopedManager.id || u.id === employee.id));
+    assert.ok(available.employees.some(e => e.id === employee.id && e.branchId === adminIdentity.branchId));
+    const makeApproval = {
+      typeId, branchId: adminIdentity.branchId, beneficiaryId: employee.id,
+      title: 'New equipment request', reason: 'Business equipment needed', amount: 1250,
+      values: { justification: 'Need a monitor', options: ['Monitor'] }
+    };
+    assert.equal((await approvalWrite('/', managerCookies, {
+      ...makeApproval, beneficiaryId: null
+    })).status, 400);
+    assert.equal((await approvalWrite('/', managerCookies, {
+      ...makeApproval, values: { options: ['Monitor'] }
+    })).status, 400);
+    assert.equal((await approvalWrite('/', managerCookies, {
+      ...makeApproval, values: { justification: 'Need a monitor', options: ['Unknown'] }
+    })).status, 400);
+    const otherBranchEmployee = await db.user.create({ data: {
+      email: 'other-branch-employee@example.test', fullName: 'Other Branch Custodian',
+      active: true, branchId, roleId: employeeRole.id
+    } });
+    assert.equal((await approvalWrite('/', managerCookies, {
+      ...makeApproval, beneficiaryId: otherBranchEmployee.id
+    })).status, 400);
+    assert.equal((await approvalWrite('/', employeeCookies, makeApproval)).status, 401);
+    const createdApproval = await approvalWrite('/', managerCookies, makeApproval);
+    assert.equal(createdApproval.status, 201);
+    const approvalCode = (await createdApproval.json() as { code: string }).code;
+    const approval = await db.approvalRequest.findUniqueOrThrow({ where: { code: approvalCode } });
+    assert.equal(approval.status, 'PENDING');
+    assert.equal(approval.beneficiaryId, employee.id);
+    // Manager cannot decide even a request with a back-office workflow.
+    assert.equal((await approvalWrite('/' + approval.id + '/decision', managerCookies,
+      { decision: 'APPROVED', comment: '' })).status, 403);
+    assert.equal((await fetch(base + '/api/v1/approvals/' + approval.id,
+      { headers: { cookie: employeeCookies } })).status, 401);
+    const approvalDetail = await fetch(base + '/api/v1/approvals/' + approval.id,
+      { headers: { cookie: managerCookies } });
+    assert.equal(approvalDetail.status, 200);
+    assert.equal((await approvalDetail.json() as { request: { beneficiaryId: string } }).request.beneficiaryId, employee.id);
+    // First level ANY — reviewer in another branch approves, other reviewer is skipped.
+    assert.equal((await approvalWrite('/' + approval.id + '/decision', reviewerCookies,
+      { decision: 'APPROVED', comment: 'Approved by back office' })).status, 200);
+    const afterFirst = await db.approvalRequest.findUniqueOrThrow({ where: { id: approval.id } });
+    assert.equal(afterFirst.currentStep, 1);
+    const skippedOffice = await db.approvalReview.findFirstOrThrow({
+      where: { requestId: approval.id, step: 0, reviewerId: adminIdentity.id }
+    });
+    assert.equal(skippedOffice.status, 'SKIPPED');
+    // Second level ALL — both office reviewers must approve.
+    assert.equal((await approvalWrite('/' + approval.id + '/decision', reviewerCookies,
+      { decision: 'APPROVED', comment: '' })).status, 200);
+    assert.equal((await db.approvalRequest.findUniqueOrThrow({ where: { id: approval.id } })).status, 'PENDING');
+    assert.equal((await approvalWrite('/' + approval.id + '/decision', both,
+      { decision: 'APPROVED', comment: '' })).status, 200);
+    assert.equal((await db.approvalRequest.findUniqueOrThrow({ where: { id: approval.id } })).status, 'APPROVED');
+    assert.equal((await approvalWrite('/' + approval.id + '/decision', both,
+      { decision: 'APPROVED', comment: '' })).status, 409);
+    assert.equal((await approvalWrite('/' + approval.id + '/cancel', managerCookies, {})).status, 409);
+    assert.ok((await db.approvalEvent.count({ where: { requestId: approval.id } })) >= 4);
+    const updateApprovalConfig = await approvalWrite('/types/' + typeId, both,
+      { ...approvalConfig, description: 'Updated without touching existing requests', beneficiaryRequired: false }, 'PUT');
+    assert.equal(updateApprovalConfig.status, 200);
+    assert.equal((await db.approvalTypeVersion.count({ where: { typeId } })), 2);
+    assert.equal((await db.approvalRequest.findUniqueOrThrow({
+      where: { id: approval.id }, include: { version: true }
+    })).version.beneficiaryRequired, true);
+    const secondApproval = await approvalWrite('/', managerCookies, { ...makeApproval, beneficiaryId: null });
+    assert.equal(secondApproval.status, 201); // v2 allows branch-only requests.
+    const secondApprovalCode = (await secondApproval.json() as { code: string }).code;
+    const secondRequest = await db.approvalRequest.findUniqueOrThrow({
+      where: { code: secondApprovalCode }, include: { version: true }
+    });
+    assert.equal(secondRequest.version.version, 2);
+    assert.equal((await approvalWrite('/' + secondRequest.id + '/decision', reviewerCookies,
+      { decision: 'CHANGES_REQUESTED', comment: '' })).status, 400);
+    assert.equal((await approvalWrite('/' + secondRequest.id + '/decision', reviewerCookies,
+      { decision: 'CHANGES_REQUESTED', comment: 'Please clarify' })).status, 200);
+    assert.equal((await approvalWrite('/' + secondRequest.id + '/resubmit', managerCookies, {
+      reason: 'Clarified information', values: { justification: 'More detail', options: ['Laptop'] },
+      beneficiaryId: employee.id
+    })).status, 200);
+    assert.equal((await db.approvalRequest.findUniqueOrThrow({
+      where: { id: secondRequest.id }
+    })).status, 'PENDING');
+    assert.equal((await approvalWrite('/' + secondRequest.id + '/decision', reviewerCookies,
+      { decision: 'REJECTED', comment: 'Not available' })).status, 200);
+    assert.equal((await db.approvalRequest.findUniqueOrThrow({
+      where: { id: secondRequest.id }
+    })).status, 'REJECTED');
+    const exportedApprovals = await approvalWrite('/export/csv', both, {
+      requestIds: [approval.id, secondRequest.id]
+    });
+    assert.equal(exportedApprovals.status, 200);
+    const exportedCsv = await exportedApprovals.text();
+    assert.ok(exportedCsv.includes(approvalCode) && exportedCsv.includes(secondApprovalCode) &&
+      exportedCsv.includes(employee.fullName));
+    assert.equal((await approvalWrite('/export/csv', managerCookies,
+      { requestIds: [approval.id] })).status, 403);
+    assert.ok((await db.securityAuditEvent.count({
+      where: { action: 'APPROVAL_REQUESTS_EXPORTED' }
+    })) >= 1);
+    await db.rolePermission.delete({ where: {
+      roleId_permissionId: { roleId: scopedRole.id, permissionId: approvalReviewPermission.id }
+    } });
 
     const logout = await fetch(base + '/api/v1/auth/logout', {
       method: 'POST', headers: { cookie: both, 'content-type': 'application/json', 'x-csrf-token': csrf.csrfToken }, body: '{}'

@@ -128,7 +128,8 @@ export const requireAuth: RequestHandler = async (req, res, next: NextFunction) 
     const now = new Date();
     if (!session || session.revokedAt || session.expiresAt <= now ||
         session.lastSeenAt.getTime() + idleMs <= now.getTime() ||
-        !session.user.active || !session.user.branch.active || !session.user.role.active) {
+        !session.user.active || !session.user.branch.active || !session.user.role.active ||
+        session.user.role.key === 'EMPLOYEE' || session.user.credential?.loginDisabled) {
       clearSessionCookie(res);
       res.status(401).json({ error: { code: 'SESSION_EXPIRED', message: 'Session expired or revoked' } });
       return;

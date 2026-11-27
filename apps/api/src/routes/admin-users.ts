@@ -32,7 +32,7 @@ function apiUser(user: any) {
     role: { id: user.role.id, key: user.role.key, name: user.role.name, protected: user.role.protected },
     branch: { id: user.branch.id, name: user.branch.name },
     department: user.department ? { id: user.department.id, name: user.department.name } : null,
-    active: user.active, pendingActivation: !user.credential,
+    active: user.active, pendingActivation: user.role.key !== 'EMPLOYEE' && !user.credential,
     phone: user.phone || '',
     lastActive: user.sessions?.[0]?.lastSeenAt ?? null
   };
@@ -116,18 +116,20 @@ router.get('/summary', asyncRoute(async (_req, res) => {
 
 router.post('/users', asyncRoute(async (req, res) => {
   const actor = principal(res);
-  if (!invitationsEnabled) {
-    failure(res, 503, 'INVITATION_DELIVERY_REQUIRED', 'Configure secure invitation delivery before creating accounts in production');
-    return;
-  }
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) { failure(res, 400, 'INVALID_INPUT', 'Check name, email, role, branch and department'); return; }
   const input = parsed.data;
   if (!globalScope(actor) && input.branchId !== actor.branchId) {
     failure(res, 403, 'FORBIDDEN', 'Cannot create users in another branch'); return;
   }
-  if (!await assignableRole(input.roleId, actor) || !await validOrganization(input.branchId, input.departmentId)) {
+  const targetRole = await assignableRole(input.roleId, actor);
+  if (!targetRole || !await validOrganization(input.branchId, input.departmentId)) {
     failure(res, 403, 'INVALID_MEMBERSHIP', 'Role, branch or department is unavailable'); return;
+  }
+  // Employee is a directory-only resource custodian; never issue login invitations.
+  if (!invitationsEnabled && targetRole.key !== 'EMPLOYEE') {
+    failure(res, 503, 'INVITATION_DELIVERY_REQUIRED', 'Configure secure invitation delivery before creating login accounts');
+    return;
   }
   try {
     const { user, activationPath } = await db.$transaction(async tx => {
@@ -138,7 +140,7 @@ router.post('/users', asyncRoute(async (req, res) => {
           phone: input.phone || null
         }
       });
-      const link = input.active ? await issueInvitation(tx, created.id, 'ACTIVATE') : null;
+      const link = input.active && targetRole.key !== 'EMPLOYEE' ? await issueInvitation(tx, created.id, 'ACTIVATE') : null;
       await tx.securityAuditEvent.create({ data: {
         action: 'ADMIN_USER_CREATED', success: true, actorUserId: actor.userId, targetUserId: created.id,
         details: JSON.stringify({ roleId: input.roleId, branchId: input.branchId, active: input.active })
@@ -246,7 +248,7 @@ router.post('/users/:userId/reset-password', asyncRoute(async (req, res) => {
   }
   const target = await db.user.findUnique({ where: { id: userId.data }, include: { role: true } });
   if (!target) { failure(res, 404, 'NOT_FOUND', 'User not found'); return; }
-  if (!allowedToManageTarget(actor, target) || !target.active ||
+  if (!allowedToManageTarget(actor, target) || !target.active || target.role.key === 'EMPLOYEE' ||
       target.id === actor.userId) {
     failure(res, 403, 'FORBIDDEN', 'Cannot reset this account'); return;
   }
